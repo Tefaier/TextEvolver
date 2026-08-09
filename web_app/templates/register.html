@@ -1,0 +1,39 @@
+{% extends "basis.html" %}
+
+{% block context %}
+    <div class="row">
+        <div class="col">
+            <img src="{{ url_for('static', filename='register.png') }}" border="2" class="image-my">
+            <form action="" method="post">
+                {{ form.hidden_tag() }}
+                <p class="loging" >
+                    {{ form.username.label }}<br>
+                    {{ form.username(size=32) }}
+                </p>
+                <p class="loging">
+                    {{ form.password.label }}<br>
+                    {{ form.password(size=32) }}
+                </p>
+                <p class="loging">
+                    {{ form.confirm.label }}<br>
+                    {{ form.confirm(size=32) }}
+                </p>
+                <p class="loging">
+                    {{ form.submit(size=32) }}
+                </p>
+            </form>
+            <div class="loging">
+                <a href="{{ url_for('login') }}">Log In instead</a>
+            </div>
+        </div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="col-2">
+            {% for category, msg in messages %}
+                <p class="text_usual msg {{ category }}">{{msg}}</p>
+            {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+    </div>
+{% endblock %}

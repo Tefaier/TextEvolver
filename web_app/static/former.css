@@ -1,0 +1,76 @@
+@media (min-width: 768px){/*desktop*/
+    .green{
+        font-size: 2rem;
+        margin-left: auto;
+        margin-right: auto;
+        text-align: center;
+        padding: 30px;
+    }
+    .clas{
+        font-size: 15px;
+        border: 2px solid #323232;
+        text-align: center;
+        margin-left: 50;
+        margin-right: 50;
+        padding: 2px;
+        border-radius: 5px;
+    }
+    .image-my{
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+        width: 50vw;
+    }
+    .loging{
+        font-size: 3vw;
+        margin-left: auto;
+        margin-right: auto;
+        text-align: center;
+        padding: 2px;
+    }
+    .data_phone{
+        display: none;
+    }
+    .data_lap{
+        display: block;
+    }
+
+}
+
+@media (max-width: 767px){/*phones*/
+    .green{
+        font-size: 2rem;
+        margin-left: auto;
+        margin-right: auto;
+        text-align: center;
+        padding: 30px;
+    }
+    .clas{
+        font-size: 15px;
+        border: 2px solid #323232;
+        text-align: center;
+        margin-left: 50;
+        margin-right: 50;
+        padding: 2px;
+        border-radius: 5px;
+    }
+    .image-my{
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+        width: 50vw;
+    }
+    .loging{
+        font-size: 3vw;
+        margin-left: auto;
+        margin-right: auto;
+        text-align: center;
+        padding: 2px;
+    }
+    .data_phone{
+        display: none;
+    }
+    .data_lap{
+        display: block;
+    }
+}

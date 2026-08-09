@@ -1,0 +1,150 @@
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Text evolver</title>
+        <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style.css') }}" />
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/css/bootstrap.min.css" integrity="sha384-TX8t27EcRE3e/ihU7zmQxVncDAy5uIKz4rEkgIXeMed4M0jlfIDPvg6uqKI2xXr2" crossorigin="anonymous" />
+        <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-ho+j7jyWK8fNQe+A12Hb8AhRq26LrZ/JpcUGGOn+Y7RsweNrtN/tE3MoK7ZeZDyx" crossorigin="anonymous"></script>
+        <script src='https://kit.fontawesome.com/e0083df4cf.js' crossorigin="anonymous"></script>
+        <script>
+	        var Download_files = function(but){
+                var text = but.firstChild.data;
+                const values = text.split(" / ");
+                but.firstChild.data = "0 / " + String(Number(values[1]) - Number(values[0]));
+                $.post('/download_files', function(data) {
+                  //do nothing
+                });
+                return false;
+	        }
+	        var Terminate_process = function(but){
+	            $.post('/terminate', function(data) {
+                  //do nothing
+                });
+	        }
+	        function Files_reset(but){
+	            var text = but.firstChild.data;
+                const values = text.split(" / ");
+                but.firstChild.data = "0 / " + String(Number(values[1]) - Number(values[0]));
+                if (but.form) {
+                    but.form.submit();
+                }
+                but.disabled = true;
+                if (but.classList.contains('proc_process')){
+                    but.classList.remove('proc_process');
+                } else if (but.classList.contains('proc_finished')){
+                    but.classList.remove('proc_finished');
+                }
+                if (Number(values[1]) - Number(values[0]) == 0) {
+                    but.classList.add('proc_empty');
+                } else {
+                    but.classList.add('proc_process');
+                }
+	        }
+	        function Show_confirm(but){
+                const buttons = but.parentNode.querySelectorAll("button");
+                for (const button of buttons){
+                    if (button.firstChild.data == "Delete"){
+                        button.style.visibility = "hidden";
+                    } else if (button.firstChild.data == "Cancel"){
+                        button.style.visibility = "visible";
+                    } else if (button.firstChild.data == "Confirm"){
+                        button.style.visibility = "visible";
+                    }
+                }
+	        }
+	        function Reject_confirm(but){
+                const buttons = but.parentNode.querySelectorAll("button");
+                for (const button of buttons){
+                    if (button.firstChild.data == "Delete"){
+                        button.style.visibility = "visible";
+                    } else if (button.firstChild.data == "Cancel"){
+                        button.style.visibility = "hidden";
+                    } else if (button.firstChild.data == "Confirm"){
+                        button.style.visibility = "hidden";
+                    }
+                }
+	        }
+	        var Delete_set = function(but){
+                $.post('/delete_set' + '/' + but.name, function(data) {
+                  //do nothing
+                });
+                const row = document.getElementById(but.name);
+                if (row != null){
+                    row.remove();
+                }
+                document.querySelector("[name='New_setting']").disabled = false;
+                return false;
+	        }
+	        function Delete_part(but){
+                const div = but.closest(".row");
+                if (div != null){
+                    div.nextElementSibling.remove();
+                    div.remove();
+                }
+	        }
+	        function Add_unit(but){
+                const div = document.querySelector("[id='default_unit']");
+                if (div != null){
+                    const clone = div.cloneNode(true);
+                    clone.removeAttribute('id');
+                    const row_p = but.parentNode.parentNode;
+                    row_p.parentNode.insertBefore(clone, row_p);
+                    const newHr = document.createElement("hr");
+                    newHr.classList.add("new");
+                    row_p.parentNode.insertBefore(newHr, row_p);
+                }
+	        }
+	        function Add_image(but){
+                const div = document.querySelector("[id='default_image']");
+                if (div != null){
+                    const clone = div.cloneNode(true);
+                    clone.removeAttribute('id');
+                    const row_p = but.parentNode.parentNode;
+                    row_p.parentNode.insertBefore(clone, row_p);
+                    const newHr = document.createElement("hr");
+                    newHr.classList.add("new");
+                    row_p.parentNode.insertBefore(newHr, row_p);
+                }
+	        }
+	        function Add_text(but){
+                const div = document.querySelector("[id='default_text']");
+                if (div != null){
+                    const clone = div.cloneNode(true);
+                    clone.removeAttribute('id');
+                    const row_p = but.parentNode.parentNode;
+                    row_p.parentNode.insertBefore(clone, row_p);
+                    const newHr = document.createElement("hr");
+                    newHr.classList.add("new");
+                    row_p.parentNode.insertBefore(newHr, row_p);
+                }
+	        }
+	        function Activate_run(inp){
+                const run_1 = document.querySelector("[id='RunS']");
+                if (run_1 != null && run_1.value=="Save and run"){
+                    run_1.disabled = false;
+                }
+                const run_2 = document.querySelector("[id='Run']");
+                if (run_2 != null && run_2.value=="Run"){
+                    run_2.disabled = false;
+                }
+	        }
+	        function Toggle_exp(but){
+	            const exp = document.querySelector("[id='Explanation']");
+                if (exp != null && but.firstChild.data == "Show explanations"){
+                    but.firstChild.data = "Hide explanations";
+                    exp.hidden = false;
+                } else if (exp != null && but.firstChild.data == "Hide explanations"){
+                    but.firstChild.data = "Show explanations";
+                    exp.hidden = true;
+                } else {
+                    but.firstChild.data = "Explanations aren't found";
+                    but.disabled = true;
+                }
+	        }
+        </script>
+    </head>
+    <body class="data">
+        {% block context %}{% endblock %}
+    </body>
+</html>
