@@ -1,0 +1,512 @@
+{% extends "logged_basis.html" %}
+
+{% block main_content %}
+    <div hidden> {# references - not shown #}
+        <div class="row" id="default_fandom"> {# fandom reference #}
+            <div class="col-2">
+                <input value="name" name="fandom" type="hidden">
+                <label class="data_heading">Fandom of Name</label>
+            </div>
+            <div class="col">
+                <div class="data_info">
+                    <label>Activated</label>
+                    <select name="fandom_active">
+                        <option value="True">Yes</option>
+                        <option value="False">No</option>
+                    </select>
+                </div>
+                <div class="data_info">
+                    <label>Separation </label>
+                    <input name="fandom_separation" class="slim_input w_limit" type="number" value="1000" step="1" min="1">
+                </div>
+                <div class="data_info">
+                    <label>Show value</label>
+                    <select name="fandom_value_1">
+                        <option value="True">Yes</option>
+                        <option value="False">No</option>
+                    </select>
+                </div>
+                <div class="data_info">
+                    <label>Show value</label>
+                    <select name="fandom_value_2">
+                        <option value="True">Yes</option>
+                        <option value="False">No</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="row" id="default_unit"> {# unit reference #}
+            <div class="col-2">
+                <label class="data_heading">Unit convertation</label>
+                <button type="button" onclick="Delete_part(this)" class="control_buttons">Delete</button>
+            </div>
+            <div class="col">
+                <div class="data_info">
+                    <label>Initial unit</label>
+                    <input name="unit_from" class="slim_input" type="text" value="From" size="15" minlength="1">
+                </div>
+                <div class="data_info">
+                    <label>New unit</label>
+                    <input name="unit_to" class="slim_input" type="text" value="To" size="15">
+                </div>
+                <div class="data_info">
+                    <label>Convertation of unit</label>
+                    <input name="unit_convert" class="slim_input w_limit" type="number" value="1000" step="any" min="0">
+                </div>
+                <div class="data_info">
+                    <label>Can be word</label>
+                    <select name="unit_can">
+                        <option value="True">Yes</option>
+                        <option value="False">No</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="row" id="default_image"> {# image reference #}
+            <div class="col-2">
+                <label class="data_heading">Image add</label>
+                <input value="Origin phrase" name="image_origin_name" type="hidden">
+                <button type="button" onclick="Delete_part(this)" class="control_buttons">Delete</button>
+            </div>
+            <div class="col">
+                <div class="data_info">
+                    <label>Trigger phrase</label>
+                    <input name="image_phrase" class="slim_input" type="text" value="Phrase" size="15" minlength="1">
+                </div>
+                <div class="data_info">
+                    <label>Separation</label>
+                    <input name="image_separation" class="slim_input w_limit" type="number" value="1000" step="1" min="1">
+                </div>
+                <div class="data_info">
+                    <label>Explanation</label>
+                    <input name="image_expl" class="slim_input" type="text" value="Explanation" size="15">
+                </div>
+                <div class="data_info">
+                    <label>Accept suffix (s/es/'/'s)</label>
+                    <select name="image_mutations">
+                        <option value="True">Yes</option>
+                        <option value="False">No</option>
+                    </select>
+                </div>
+                <div class="data_info">
+                    <label>Images</label>
+                    <input name="image_files" type="file" accept="image/*" multiple>
+                    <input name="image_files" type="file" accept="image/*" multiple hidden>
+                </div>
+            </div>
+        </div>
+        <div class="row" id="default_text"> {# phrase reference #}
+            <div class="col-2">
+                <label class="data_heading">Phrase convertion</label>
+                <button type="button" onclick="Delete_part(this)" class="control_buttons">Delete</button>
+            </div>
+            <div class="col">
+                <div class="data_info">
+                    <label>Change from</label>
+                    <input name="phrase_from" class="slim_input" type="text" value="Phrase from" size="15" minlength="1">
+                </div>
+                <div class="data_info">
+                    <label>Change to</label>
+                    <input name="phrase_to" class="slim_input" type="text" value="Phrase to" size="15">
+                </div>
+                <div class="data_info">
+                    <label>Direct change</label>
+                    <select name="phrase_direct">
+                        <option value="True">Yes</option>
+                        <option value="False">No</option>
+                    </select>
+                </div>
+                <div class="data_info">
+                    <label>Accept suffix (s/es/'/'s)</label>
+                    <select name="phrase_mutations">
+                        <option value="True">Yes</option>
+                        <option value="False">No</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="row text_usual">
+        <div class="col">
+            <button class="control_buttons" onclick="Toggle_exp(this)">Show explanations</button>
+            <br>
+        </div>
+    </div>
+    <div hidden id="Explanation" class="row text_usual">
+        <div class="col">
+            <p class="data_info">Text Evolver - this website allows you to alter content of your text-based files in certain ways</p>
+            <p class="data_info">The way text will be altered is based on "setting" that you create and is connected yo your account</p>
+            <br>
+            <p class="data_info">Name of setting: it's the way your setting will be named and viewed in "My settings" and when you search</p>
+            <p class="data_info">Publicity of setting: determines if your setting can be founded by users in search</p>
+            <p class="data_info">Clean empty of setting: determines if to clean lines without actual meaning (only symbols - no letters or digits) in the text</p>
+            <p class="data_info">Convert to utf of setting: determines if to convert symbols as &lt; to their utf representation</p>
+            <p class="data_info">Digit separator: determines what will be recognised as a separator in decimals, only one can be chosen</p>
+            <p class="data_info">Expect feet: if you want your setting to recognise ft in the form of 6'7, choose it. They will then be converted to cm by default unless you set unit convertation from phrase "feet"</p>
+            <br>
+            <p class="data_info">Fandom of {name}: a recognition of certain fandom based on official website. User can't add a new one. Its function is to add images to text if it finds name from fandom</p>
+            <p class="data_info">Fandom - Activated: determines if this fandom is activated. If yes, it can heavily affect performance speed</p>
+            <p class="data_info">Fandom - Separation: determines number of words that have to be between the same phrase to trigger image insertion. If it's "1", it will insert image only once</p>
+            <p class="data_info">Fandom - Show height: tells if image should have this value on it (taken from official website). Won't be shown if it's not possible</p>
+            <p class="data_info">Fandom - Show weight: tells if image should have this value on it (taken from official website). Won't be shown if it's not possible</p>
+            <br>
+            <p class="data_info">Unit convertation: recognises unit and then converts it to another</p>
+            <p class="data_info">Unit - Initial unit: what word will be recognised and trigger change</p>
+            <p class="data_info">Unit - New unit: the unit that unit will be replaced with</p>
+            <p class="data_info">Unit - Convertation of unit: by what value number before unit will be multiplied</p>
+            <p class="data_info">Unit - Can be word: if initial unit can be as well act as word and not unit, choose it. Otherwise it will always change and add number before it, if there is none</p>
+            <br>
+            <p class="data_info">Image add (convertation): adds image based on some phrase</p>
+            <p class="data_info">Image - Trigger phrase: what phrase will be recognised and trigger change (if it overlaps with fandom's value, they will merge)</p>
+            <p class="data_info">Image - Separation: determines number of words that have to be between the same phrase to trigger image insertion. If it's "1", it will insert image only once</p>
+            <p class="data_info">Image - Explanation: a phrase that will be added on image as a sort of explanation. Must be less than 20 symbols. If left empty, there will be none (and no space on image reserved)</p>
+            <p class="data_info">Image - Accept suffix: if recognition by phrase should accept having suffixes</p>
+            <p class="data_info">Image - Images: image(s) that will be added. If there are few, one will be chosen randomly. If it's merged with fandom's value, image will be chosen from these and fandom's. Also, if you opened already existing setting, living it empty will leave previous images and changing will set new</p>
+            <br>
+            <p class="data_info">Phrase convertion: recognises phrase and then converts it to another</p>
+            <p class="data_info">Phrase - Change from: what phrase will be recognised and trigger change</p>
+            <p class="data_info">Phrase - Change to: on what phrase initial one will be changed</p>
+            <p class="data_info">Phrase - Direct change: if chosen, change will recognise only initial phrase as it's but will as well allow initial phrase to have special symbols</p>
+            <p class="data_info">Phrase - Accept suffix: if recognition by phrase should accept having suffixes. If direct change is chosen, it's irrelevant</p>
+            <br>
+            <p class="data_info">Put here files to process: files for process</p>
+            <p class="data_info">Save - your settings only: saves settings</p>
+            <p class="data_info">Save and run - your setting only: saves settings and then runs it on inputted files</p>
+            <p class="data_info">Run: runs setting on inputted files</p>
+            <p class="data_info">Copy - others setting only: will copy setting and add it to your own. Requires you to have free space for it. Publicity of copied setting will be set to private</p>
+            <br>
+            <hr class="new" />
+            <br>
+            <hr class="new" />
+            <br>
+        </div>
+    </div>
+    <div class="row no-gutters text_usual"> {# start of work field #}
+        <div class="col">
+            <form action="{{ url_for('setting', setting_id=setting.id) }}" method="POST" enctype=multipart/form-data>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="row">
+                    <div class="col-2">
+                        <label class="data_heading">Name of setting</label>
+                    </div>
+                    <div class="col">
+                        <div class="data_info">
+                            <input name="set_name" class="slim_input" type="text" value="{{ setting.name }}" size="32" maxlength="32" minlength="1">
+                        </div>
+                    </div>
+                </div>
+                <hr class="new" />
+                <div class="row">
+                    <div class="col-2">
+                        <label class="data_heading">Publicity of setting</label>
+                    </div>
+                    <div class="col">
+                        <div class="data_info">
+                            <select name="set_public">
+                                {% if setting.public %}
+                                <option value="True" selected>Public</option>
+                                <option value="False">Private</option>
+                                {% else %}
+                                <option value="True">Public</option>
+                                <option value="False" selected>Private</option>
+                                {% endif %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <hr class="new" />
+                <div class="row">
+                    <div class="col-2">
+                        <label class="data_heading">Clean empty lines</label>
+                    </div>
+                    <div class="col">
+                        <div class="data_info">
+                            <select name="set_empty">
+                                {% if setting.clean_empty %}
+                                <option value="True" selected>Clean</option>
+                                <option value="False">Don't clean</option>
+                                {% else %}
+                                <option value="True">Clean</option>
+                                <option value="False" selected>Don't clean</option>
+                                {% endif %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <hr class="new" />
+                <div class="row">
+                    <div class="col-2">
+                        <label class="data_heading">Convert to utf</label>
+                    </div>
+                    <div class="col">
+                        <div class="data_info">
+                            <select name="set_utf">
+                                {% if setting.convert_to_utf %}
+                                <option value="True" selected>Symbols to utf</option>
+                                <option value="False">Ignore</option>
+                                {% else %}
+                                <option value="True">Symbols to utf</option>
+                                <option value="False" selected>Ignore</option>
+                                {% endif %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <hr class="new" />
+                <div class="row">
+                    <div class="col-2">
+                        <label class="data_heading">Digit separator</label>
+                    </div>
+                    <div class="col">
+                        <div class="data_info">
+                            <select name="set_coma_sep">
+                                {% if setting.use_coma_sep %}
+                                <option value="True" selected>Comma (,)</option>
+                                <option value="False">Dot (.)</option>
+                                {% else %}
+                                <option value="True">Comma (,)</option>
+                                <option value="False" selected>Dot (.)</option>
+                                {% endif %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <hr class="new" />
+                <div class="row">
+                    <div class="col-2">
+                        <label class="data_heading">Expect feet</label>
+                    </div>
+                    <div class="col">
+                        <div class="data_info">
+                            <select name="set_expect_feet">
+                                {% if setting.expect_feet %}
+                                <option value="True" selected>Feets (6'7) will be in text</option>
+                                <option value="False">Feets won't be in text</option>
+                                {% else %}
+                                <option value="True">Feets (6'7) will be in text</option>
+                                <option value="False" selected>Feets won't be in text</option>
+                                {% endif %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <hr class="new" />
+                {% for fandom in setting.fandoms %}
+                <div class="row">
+                    <div class="col-2">
+                        <input value="{{ fandom.name }}" name="fandom" type="hidden">
+                        <label class="data_heading">Fandom of {{ fandom.name }}</label>
+                    </div>
+                    <div class="col"> {# information of fandom #}
+                        <div class="data_info"> {# fandom.active #}
+                            <label>Activated</label>
+                            <select name="fandom_active">
+                                {% if fandom.active %}
+                                <option value="True" selected>Yes</option>
+                                <option value="False">No</option>
+                                {% else %}
+                                <option value="True">Yes</option>
+                                <option value="False" selected>No</option>
+                                {% endif %}
+                            </select>
+                        </div>
+                        <div class="data_info"> {# fandom.separation #}
+                            <label>Separation</label>
+                            <input name="fandom_separation" class="slim_input w_limit" type="number" value="{{ fandom.separation }}" step="1" min="1">
+                        </div>
+                        <div class="data_info"> {# fandom.support_value_1 #}
+                            <label>Show height</label>
+                            <select name="fandom_value_1">
+                                {% if fandom.support_value_1 %}
+                                <option value="True" selected>Yes</option>
+                                <option value="False">No</option>
+                                {% else %}
+                                <option value="True">Yes</option>
+                                <option value="False" selected>No</option>
+                                {% endif %}
+                            </select>
+                        </div>
+                        <div class="data_info"> {# fandom.support_value_2 #}
+                            <label>Show weight</label>
+                            <select name="fandom_value_2">
+                                {% if fandom.support_value_2 %}
+                                <option value="True" selected>Yes</option>
+                                <option value="False">No</option>
+                                {% else %}
+                                <option value="True">Yes</option>
+                                <option value="False" selected>No</option>
+                                {% endif %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <hr class="new" />
+                {% endfor %}
+                {% for unit_conv in setting.unit_convs %}
+                <div class="row">
+                    <div class="col-2">
+                        <label class="data_heading">Unit convertation</label>
+                        <button type="button" onclick="Delete_part(this)" class="control_buttons">Delete</button>
+                    </div>
+                    <div class="col"> {# information of unit convertation #}
+                        <div class="data_info"> {# unit_conv.phrase_from #}
+                            <label>Initial unit</label>
+                            <input name="unit_from" class="slim_input" type="text" value="{{ unit_conv.phrase_from }}" size="15" minlength="1">
+                        </div>
+                        <div class="data_info"> {# unit_conv.phrase_to #}
+                            <label>New unit</label>
+                            <input name="unit_to" class="slim_input" type="text" value="{{ unit_conv.phrase_to }}" size="15">
+                        </div>
+                        <div class="data_info"> {# unit_conv.conversion #}
+                            <label>Convertation of unit</label>
+                            <input name="unit_convert" class="slim_input w_limit" type="number" value="{{ unit_conv.conversion }}" step="any" min="0">
+                        </div>
+                        <div class="data_info"> {# unit_conv.can_be_word #}
+                            <label>Can be word</label>
+                            <select name="unit_can">
+                                {% if unit_conv.can_be_word %}
+                                <option value="True" selected>Yes</option>
+                                <option value="False">No</option>
+                                {% else %}
+                                <option value="True">Yes</option>
+                                <option value="False" selected>No</option>
+                                {% endif %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <hr class="new" />
+                {% endfor %}
+                <div class="row">
+                    <div class="col">
+                        <button type="button" type="button" onclick="Add_unit(this)" class="control_buttons">Add unit convertion</button>
+                    </div>
+                </div>
+                <hr class="new" />
+                {% for image_conv in setting.image_convs %}
+                <div class="row">
+                    <div class="col-2">
+                        <label class="data_heading">Image add</label>
+                        <input value="{{ image_conv.phrase }}" name="image_origin_name" type="hidden">
+                        <button type="button" onclick="Delete_part(this)" class="control_buttons">Delete</button>
+                    </div>
+                    <div class="col"> {# information of image_conv #}
+                        <div class="data_info"> {# image_conv.phrase #}
+                            <label>Trigger phrase</label>
+                            <input name="image_phrase" class="slim_input" type="text" value="{{ image_conv.phrase }}" size="15" minlength="1">
+                        </div>
+                        <div class="data_info"> {# image_conv.separation #}
+                            <label>Separation</label>
+                            <input name="image_separation" class="slim_input w_limit" type="number" value="{{ image_conv.separation }}" step="1" min="1">
+                        </div>
+                        <div class="data_info"> {# image_conv.explanation #}
+                            <label>Explanation</label>
+                            <input name="image_expl" class="slim_input" type="text" value="{{ image_conv.explanation }}" size="15">
+                        </div>
+                        <div class="data_info"> {# image_conv.mutations #}
+                            <label>Accept suffix (s/es/'/'s)</label>
+                            <select name="image_mutations">
+                                {% if image_conv.mutations %}
+                                <option value="True" selected>Yes</option>
+                                <option value="False">No</option>
+                                {% else %}
+                                <option value="True">Yes</option>
+                                <option value="False" selected>No</option>
+                                {% endif %}
+                            </select>
+                        </div>
+                        <div class="data_info"> {# image_conv.images #}
+                            <label>Images</label>
+                            <input name="image_files" type="file" accept="image/*" multiple>
+                            <input name="image_files" type="file" accept="image/*" multiple hidden>
+                        </div>
+                    </div>
+                </div>
+                <hr class="new" />
+                {% endfor %}
+                <div class="row">
+                    <div class="col">
+                        <button type="button" onclick="Add_image(this)" class="control_buttons">Add image convertion</button>
+                    </div>
+                </div>
+                <hr class="new" />
+                {% for phrase_conv in setting.phrase_convs %}
+                <div class="row">
+                    <div class="col-2">
+                        <label class="data_heading">Phrase convertion</label>
+                        <button type="button" onclick="Delete_part(this)" class="control_buttons">Delete</button>
+                    </div>
+                    <div class="col"> {# information of text convertation #}
+                        <div class="data_info"> {# phrase_conv.phrase_from #}
+                            <label>Change from</label>
+                            <input name="phrase_from" class="slim_input" type="text" value="{{ phrase_conv.phrase_from }}" size="15" minlength="1">
+                        </div>
+                        <div class="data_info"> {# phrase_conv.phrase_to #}
+                            <label>Change to</label>
+                            <input name="phrase_to" class="slim_input" type="text" value="{{ phrase_conv.phrase_to }}" size="15">
+                        </div>
+                        <div class="data_info"> {# phrase_conv.direct #}
+                            <label>Direct change</label>
+                            <select name="phrase_direct">
+                                {% if phrase_conv.direct %}
+                                <option value="True" selected>Yes</option>
+                                <option value="False">No</option>
+                                {% else %}
+                                <option value="True">Yes</option>
+                                <option value="False" selected>No</option>
+                                {% endif %}
+                            </select>
+                        </div>
+                        <div class="data_info"> {# phrase_conv.mutations #}
+                            <label>Accept suffix (s/es/'/'s)</label>
+                            <select name="phrase_mutations">
+                                {% if phrase_conv.mutations %}
+                                <option value="True" selected>Yes</option>
+                                <option value="False">No</option>
+                                {% else %}
+                                <option value="True">Yes</option>
+                                <option value="False" selected>No</option>
+                                {% endif %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <hr class="new" />
+                {% endfor %}
+                <div class="row">
+                    <div class="col">
+                        <button type="button" onclick="Add_text(this)" class="control_buttons">Add text convertion</button>
+                    </div>
+                </div>
+                <hr class="new" />
+                <div class="row">
+                    <div class="col data_info"> {# files input #}
+                        <label>Files to process</label>
+                        <input onchange="Activate_run(this)" name="Process_files" type="file" accept="{{ '.' + allowed_extensions|join(', .') }}" multiple>
+                    </div>
+                </div>
+                <hr class="new" />
+                <div class="row">
+                    <div class="col">
+                        {% if setting.owner_id == user.id %}
+                        <input class="control_buttons" type="submit" name="save" value="Save">
+                        <input class="control_buttons" type="submit" name="save_run" id="RunS" value="Save and run{{ '' if (files_situation[0]==0 and files_situation[1]==0) else ' (disabled)' }}" disabled>
+                        {% else %}
+                        <input class="control_buttons" type="submit" name="copy" value="Copy">
+                        {% endif %}
+                        <input class="control_buttons" type="submit" name="run" id="Run" value="Run{{ '' if (files_situation[0]==0 and files_situation[1]==0) else ' (disabled)' }}" disabled>
+                    </div>
+                </div>
+            </form>
+        </div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="col-2">
+            {% for category, msg in messages %}
+                <p class="text_usual msg {{ category }}">{{msg}}</p>
+            {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+    </div>
+{% endblock %}

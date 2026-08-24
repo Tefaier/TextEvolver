@@ -1,0 +1,117 @@
+name: text-evolver
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.24.1-p0
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      AUTH_TYPE: scram-sha-256
+      POOL_MODE: transaction
+      LISTEN_PORT: 6432
+      MAX_CLIENT_CONN: 200
+      DEFAULT_POOL_SIZE: 20
+    ports:
+      - "6432:6432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 6432 -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    image: redgate/flyway:11.15.0
+    environment:
+      FLYWAY_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      FLYWAY_USER: ${POSTGRES_USER}
+      FLYWAY_PASSWORD: ${POSTGRES_PASSWORD}
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql/postgresql
+      FLYWAY_CONNECT_RETRIES: 20
+    volumes:
+      - ./migrations/sql:/flyway/sql:ro
+    command: ["migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: text-evolver:local
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@pgbouncer:6432/${POSTGRES_DB}
+      SECRET_KEY: ${SECRET_KEY}
+      WORK_ROOT: /data/work
+      TEMP_ROOT: /data/tmp
+      CHROME_USER_DATA_DIR: /data/chrome/app
+      CHROME_BINARY: /usr/bin/chromium
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      UPLOAD_LIMIT_BYTES: ${UPLOAD_LIMIT_BYTES:-26214400}
+      SETTING_LIMIT_BYTES: ${SETTING_LIMIT_BYTES:-536870912}
+      RESULTS_PER_PAGE: ${RESULTS_PER_PAGE:-50}
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    volumes:
+      - work-data:/data/work
+      - temp-data:/data/tmp
+      - chrome-data:/data/chrome
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      pgbouncer:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    image: text-evolver:local
+    command: ["python", "-m", "text_evolver.worker"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@pgbouncer:6432/${POSTGRES_DB}
+      SECRET_KEY: ${SECRET_KEY}
+      WORK_ROOT: /data/work
+      TEMP_ROOT: /data/tmp
+      CHROME_USER_DATA_DIR: /data/chrome/worker
+      CHROME_BINARY: /usr/bin/chromium
+      WORKER_POLL_SECONDS: ${WORKER_POLL_SECONDS:-2}
+      WORKER_CANCEL_POLL_SECONDS: ${WORKER_CANCEL_POLL_SECONDS:-0.5}
+      WORKER_MIN_FREE_MEMORY_BYTES: ${WORKER_MIN_FREE_MEMORY_BYTES:-805306368}
+      JOB_STALE_SECONDS: ${JOB_STALE_SECONDS:-300}
+    volumes:
+      - work-data:/data/work
+      - temp-data:/data/tmp
+      - chrome-data:/data/chrome
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  work-data:
+  temp-data:
+  chrome-data:
+

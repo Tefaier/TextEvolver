@@ -1,0 +1,173 @@
+from dataclasses import dataclass
+
+from bs4 import BeautifulSoup
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from text_evolver.db.models import Fandom, ImageConversion, PhraseConversion, Setting, UnitConversion
+from text_evolver.processing.browser import POKEMON_BASE_URL, POKEMON_LIST_PATH, build_driver
+
+
+@dataclass(frozen=True)
+class ProcessingConfiguration:
+    use_comma_separator: bool
+    expect_feet: bool
+    clean_empty: bool
+    convert_to_utf: bool
+    fandoms: tuple[dict[str, object], ...]
+    units: tuple[dict[str, object], ...]
+    phrases: tuple[dict[str, object], ...]
+    images: tuple[dict[str, object], ...]
+
+
+def load_processing_configuration(session: Session, setting_id: int) -> ProcessingConfiguration:
+    setting = session.get(Setting, setting_id)
+    if setting is None:
+        raise LookupError(f"Setting {setting_id} does not exist")
+    fandoms = session.scalars(select(Fandom).where(Fandom.setting_id == setting_id).order_by(Fandom.id))
+    units = session.scalars(
+        select(UnitConversion).where(UnitConversion.setting_id == setting_id).order_by(UnitConversion.id)
+    )
+    phrases = session.scalars(
+        select(PhraseConversion).where(PhraseConversion.setting_id == setting_id).order_by(PhraseConversion.id)
+    )
+    images = session.scalars(
+        select(ImageConversion).where(ImageConversion.setting_id == setting_id).order_by(ImageConversion.id)
+    )
+    return ProcessingConfiguration(
+        use_comma_separator=setting.use_comma_separator,
+        expect_feet=setting.expect_feet,
+        clean_empty=setting.clean_empty,
+        convert_to_utf=setting.convert_to_utf,
+        fandoms=tuple(
+            {
+                "name": value.name,
+                "active": value.active,
+                "separation": value.separation,
+                "support_value_1": value.support_value_1,
+                "support_value_2": value.support_value_2,
+            }
+            for value in fandoms
+        ),
+        units=tuple(
+            {
+                "phrase_from": value.phrase_from,
+                "phrase_to": value.phrase_to,
+                "conversion": value.conversion,
+                "can_be_word": value.can_be_word,
+            }
+            for value in units
+        ),
+        phrases=tuple(
+            {
+                "phrase_from": value.phrase_from,
+                "phrase_to": value.phrase_to,
+                "direct": value.direct,
+                "mutations": value.mutations,
+            }
+            for value in phrases
+        ),
+        images=tuple(
+            {
+                "phrase": value.phrase,
+                "separation": value.separation,
+                "explanation": value.explanation,
+                "mutations": value.mutations,
+                "images": value.images,
+            }
+            for value in images
+        ),
+    )
+
+
+def configure_process_unit(unit: object, configuration: ProcessingConfiguration) -> None:
+    unit.settings.update(
+        {
+            "pokemon": False,
+            "coma in digits": configuration.use_comma_separator,
+            "feet check": configuration.expect_feet,
+            "clean empty": configuration.clean_empty,
+            "convert to utf": configuration.convert_to_utf,
+        }
+    )
+    for fandom in configuration.fandoms:
+        if fandom["name"] == "Pokemons":
+            unit.settings["pokemon"] = fandom["active"]
+            if fandom["active"]:
+                unit.settings["show_pokemon_weight"] = fandom["support_value_1"]
+                unit.settings["show_pokemon_height"] = fandom["support_value_2"]
+                _load_pokemons(unit, int(fandom["separation"]))
+    for value in configuration.units:
+        unit.units_list[value["phrase_from"]] = {
+            "split": str(value["phrase_to"]).split(" "),
+            "new unit": value["phrase_to"],
+            "conversion": value["conversion"],
+            "can be word": value["can_be_word"],
+        }
+    for value in configuration.images:
+        binaries = str(value["images"]).split("*")
+        if value["phrase"] in unit.pokemons_list:
+            item = unit.pokemons_list[value["phrase"]]
+            item.update(
+                {
+                    "separation": value["separation"],
+                    "explanation": value["explanation"],
+                }
+            )
+            item["binary"].extend(binaries)
+        else:
+            unit.extra_img_list[value["phrase"]] = {
+                "split": str(value["phrase"]).split(" "),
+                "separation": value["separation"],
+                "last word": None,
+                "mutation": value["mutations"],
+                "binary": binaries,
+                "explanation": value["explanation"],
+            }
+    for value in configuration.phrases:
+        if value["direct"]:
+            unit.direct_conversions[value["phrase_from"]] = value["phrase_to"]
+        else:
+            unit.word_conversions[value["phrase_from"]] = {
+                "split": str(value["phrase_from"]).split(" "),
+                "new words": value["phrase_to"],
+                "mutation": value["mutations"],
+            }
+    if configuration.expect_feet and "feet" not in unit.units_list:
+        unit.units_list["feet"] = {
+            "split": ["feet"],
+            "new unit": "cm",
+            "conversion": 30.3,
+            "can be word": True,
+        }
+
+
+def _load_pokemons(unit: object, default_separation: int) -> None:
+    driver = build_driver()
+    try:
+        driver.get(POKEMON_BASE_URL + POKEMON_LIST_PATH)
+        soup = BeautifulSoup(driver.page_source, "html.parser")
+        body = soup.find("tbody")
+        if body is None:
+            return
+        for row in body.find_all("tr"):
+            name_field = row.find(class_="cell-name")
+            if name_field is None or (link_field := name_field.find("a")) is None:
+                continue
+            muted = name_field.find(class_="text-muted")
+            nickname = link_field.get_text().replace("♀", "").replace("♂", "")
+            if muted is not None and nickname in muted.text:
+                nickname = muted.text.replace("♀", "").replace("♂", "")
+            unit.pokemons_list.setdefault(
+                nickname,
+                {
+                    "split": nickname.split(" "),
+                    "separation": default_separation,
+                    "link": POKEMON_BASE_URL + link_field.get("href"),
+                    "last word": None,
+                    "binary": [],
+                    "explanation": None,
+                },
+            )
+    finally:
+        driver.quit()

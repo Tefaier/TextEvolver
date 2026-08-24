@@ -1,0 +1,298 @@
+import os
+import random
+import re
+from io import BytesIO
+from pathlib import Path
+
+import bs4.element
+import ebooklib
+from bs4 import BeautifulSoup
+from docx import Document
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from docx.oxml.text.paragraph import CT_P
+from docx.shared import Cm
+from docx.text.paragraph import Paragraph
+from ebooklib import epub
+
+from text_evolver.processing.binary_converter import convert_binary
+from text_evolver.processing.browser import HTML_IMAGE_STYLE, POKEMON_BASE_URL, POKEMON_LIST_PATH
+from text_evolver.processing.images import get_image, get_pokemon_image
+
+#from tqdm import tqdm
+from text_evolver.processing.settings_loader import ProcessingConfiguration, configure_process_unit
+from text_evolver.processing.text_analysis import (
+    convert_utf8_symbols,
+    find_in_clean,
+    possible_mutations,
+    replace_iteration,
+    string_with_meaning,
+    text_cleaner,
+)
+
+
+def values_reset(object):
+    object.settings = {}
+    object.pokemons_list = {}
+    object.pokemons_link = POKEMON_BASE_URL
+    object.pokemons_link_list = POKEMON_LIST_PATH
+    object.units_list = {}
+    object.word_conversions = {}
+    object.direct_conversions = {}
+    object.extra_img_list = {}
+    object.word_counter = 0
+    object.html_image_style = HTML_IMAGE_STYLE
+    object.file_type = ''
+    object.mutations_string = "|".join(possible_mutations)
+    object.images_insert = []
+    object.pokemons_navigation_map = []
+    object.images_navigation_map = []
+    object.feet_case = False
+    object.clean_empty = False
+    object.convert_to_utf = False
+
+
+def delete_paragraph(paragraph):
+    p = paragraph._element
+    p.getparent().remove(p)
+    p._p = p._element = None
+
+
+def image_choser(obj: dict): # if link is chosen return None else return binary
+    try:
+        link = obj["link"]
+    except:
+        link = None
+    images_num = len(obj["binary"]) + (0 if link==None else 1)
+    random_num = random.randint(0, images_num - 1)
+    if link!=None and random_num==0:
+        return None
+    else:
+        return obj["binary"][random_num - (0 if link==None else 1)]
+
+
+def image_insert(object, unit, image_data: str):
+    if object.file_type in ['fb2', 'epub']:
+        try:
+            number = str(object.images_insert.index(image_data)) + ".jpg"
+        except:
+            number = str(len(object.images_insert)) + ".jpg"
+            object.images_insert.append(image_data)
+            binary_tag = BeautifulSoup("", 'xml').new_tag('binary', id=number, **{'content-type': 'image/jpeg'})
+            binary_tag.string = image_data
+            unit.insert_before(binary_tag)
+        new_tag = BeautifulSoup("", 'xml').new_tag('image', **{'href':"#" + number})
+        unit.insert_before(new_tag)
+    elif object.file_type == 'docx':
+        pp = CT_P.add_p_before(unit._element)
+        p = Paragraph(pp, unit._parent)
+        #p = unit.insert_paragraph_before('')
+        p.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+        p.add_run().add_picture(BytesIO(convert_binary(image_data, "PIL")), width=Cm(12))
+    elif object.file_type == 'html':
+        new_tag = BeautifulSoup("", 'html.parser').new_tag('img', src="data:image/jpeg;base64," + image_data, style=HTML_IMAGE_STYLE)
+        unit.insert_before(new_tag)
+
+
+class ProcessUnit:
+    settings: dict
+    pokemons_list: dict
+    units_list: dict
+    word_conversions: dict
+    direct_conversions: dict
+    extra_img_list: dict
+
+    images_insert: list
+    pokemons_navigation_map: list
+    images_navigation_map: list
+
+    html_image_style: str
+    file_type: str
+    mutations_string: str
+    pokemons_link: str
+    pokemons_link_list: str
+
+    word_counter: int
+
+    #feet_case: bool
+    #clean_empty: bool
+    #convert_to_utf: bool
+
+    def __init__(this, configuration: ProcessingConfiguration):
+        values_reset(this)
+        configure_process_unit(this, configuration)
+        this.pokemons_navigation_map = [[x.lower(), x] for x in this.pokemons_list.keys()]
+        this.images_navigation_map = [[x.lower(), x] for x in this.extra_img_list.keys()]
+
+    def images_locate(this, string: str, unit):
+        clean_text = text_cleaner(string, this.settings)
+        if this.settings["pokemon"]:
+            results = re.findall(fr"\b(?i:({'|'.join(this.pokemons_list.keys())}))({this.mutations_string})?\b", clean_text)
+            for result in results:
+                key = list(filter(lambda x: x[0] == result[0].lower(), this.pokemons_navigation_map))[0][1]
+                item = this.pokemons_list[key]
+                if (item["last word"] == None) or (item["last word"] + item["separation"] < this.word_counter and item["separation"] != 1):
+                        image_data = get_pokemon_image(key, this.settings, item["link"], image_choser(item), item["explanation"])
+                        if image_data != None:
+                            this.pokemons_list[key]["last word"] = this.word_counter
+                            image_insert(this, unit, image_data)
+        if len(this.extra_img_list) != 0:
+            results = re.findall(fr"\b(?i:({'|'.join(this.extra_img_list.keys())}))({this.mutations_string})?\b", clean_text)
+            for result in results:
+                key = list(filter(lambda x: x[0] == result[0].lower(), this.images_navigation_map))[0][1]
+                item = this.extra_img_list[key]
+                if (result[1] == '' or item["mutation"]) and ((item["last word"] == None) or (item["last word"] + item["separation"] < this.word_counter and item["separation"] != 1)):
+                        image_data = get_image(image_choser(item), key, key, item["explanation"])
+                        if image_data != None:
+                            this.extra_img_list[key]["last word"] = this.word_counter
+                            image_insert(this, unit, image_data)
+
+    def direct_replace(this, string: str):  # direct replacement, convertation of symbols to utf
+        for item in this.direct_conversions.items():
+            string = string.replace(item[0], item[1])
+        if this.settings["convert to utf"]:
+            string = convert_utf8_symbols(string)
+        return string
+
+    def p_process(this, unit):  # processing of text unit for html
+        if this.settings["clean empty"] and not string_with_meaning(unit.text):
+            unit.decompose()
+            return
+        this.images_locate(unit.text, unit)
+        parts = unit.contents
+        for part in parts:
+            text = this.direct_replace(part.text)
+            words = text.split(' ')
+            if words not in [[''], ['\n']]:
+                words = this.text_alteration(words)
+                this.word_counter += len(words)
+                if type(part) == bs4.element.NavigableString:
+                    part.replace_with(bs4.element.NavigableString(' '.join(words)))
+                else:
+                    part.string = ' '.join(words)
+
+    def text_alteration(this, words: list):  # change last words for any
+        clean_text = text_cleaner(" ".join(words), this.settings).split(" ")
+
+        for item in this.units_list.items():
+            results = find_in_clean(clean_text, item[1]["split"], item[0], False, {"units": item[1]["conversion"], "replace_with": item[1]["new unit"], "feet": (this.units_list['feet']["conversion"] if this.settings['feet check'] else None), "can be word": item[1]["can be word"]})
+            if results["found"]:
+                try:
+                    words = replace_iteration(results["replace_map"], words.copy())
+                    clean_text = text_cleaner(" ".join(words), this.settings).split(" ")
+                except:
+                    pass
+        for item in this.word_conversions.items():
+            results = find_in_clean(clean_text, item[1]["split"], item[0], item[1]["mutation"], {"units": None, "replace_with": item[1]["new words"], "feet": None, "can be word": None})
+            if results["found"]:
+                try:
+                    words = replace_iteration(results["replace_map"], words.copy())
+                    clean_text = text_cleaner(" ".join(words), this.settings).split(" ")
+                except:
+                    pass
+
+        return words
+
+    def p_process_word(this, par, table=None):  # processing of text unit for word
+        if this.settings["clean empty"] and not string_with_meaning(par.text):
+            delete_paragraph(par)
+            return
+        for run in par.runs:
+            text = this.direct_replace(run.text)
+            if (text not in ['', '\n', ' ']):
+                this.images_locate(text, par if table is None else table)
+                words = text.split(' ')
+                words = this.text_alteration(words)
+                this.word_counter += len(words)
+                run.text = ' '.join(words)
+
+    def remake_text(this, file_from, file_to):
+        this.images_insert = []
+        this.file_type = str(file_from).rsplit('.', 1)[-1].lower()
+        if (this.file_type == "html"):  # html - check p AND span
+            with open(file_from, "r", encoding="UTF-8") as file_read:
+                soup = BeautifulSoup(file_read, 'html.parser')
+            units = soup.find_all(['p', 'span'])
+            #total_num = len(units)
+            #tq = tqdm(total=total_num, bar_format='{l_bar}{bar:30}{r_bar}')
+            for unit in units:
+                if unit.find_parent('p' if unit.name == 'span' else 'span') is None:
+                    this.p_process(unit)
+                #tq.update(1)
+            with open(file_to, "wb") as file:
+                file.write(soup.encode())
+            os.remove(file_from)
+            #tq.close()
+            return file_to
+
+        elif (this.file_type == "epub"):  # epub
+            file_read = epub.read_epub(file_from)
+            items = file_read.get_items()
+            #tq_main = tqdm(total=len(file_read.items), bar_format='{l_bar}{bar:20}{r_bar}', position=0)
+            for item in items:
+                if item.get_type() != ebooklib.ITEM_DOCUMENT:
+                    continue
+                soup = BeautifulSoup(item.get_content(), features='xml')
+                units = soup.find_all(['p', 'span'])
+                for unit in units:
+                    if unit.find_parent('p' if unit.name == 'span' else 'span') is None:
+                        this.p_process(unit)
+                item.set_content(soup.encode())
+                this.images_insert = []
+                #tq_main.update(1)
+            epub.write_epub(file_to, file_read)
+            os.remove(file_from)
+            #tq_main.close()
+            return file_to
+
+        elif (this.file_type == "docx"):  # docx
+            document = Document(file_from)
+            #total_num = len(document.paragraphs)
+            #tq = tqdm(total=total_num, bar_format='{l_bar}{bar:30}{r_bar}')
+            for paragraph in document.paragraphs:
+                this.p_process_word(paragraph)
+                #tq.update()
+            for table in document.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        for paragraph in cell.paragraphs:
+                            this.p_process_word(paragraph, table)
+            document.save(file_to)
+            os.remove(file_from)
+            #tq.close()
+            return file_to
+
+        elif (this.file_type == "fb2"):  # fb2 - check p
+            with open(file_from, "r", encoding="UTF-8") as file_read:
+                soup = BeautifulSoup(file_read, 'xml')
+            units = soup.find_all(['p', 'span'])
+            #total_num = len(units)
+            #tq = tqdm(total=total_num, bar_format='{l_bar}{bar:30}{r_bar}')
+            for unit in units:
+                if unit.find_parent('p' if unit.name == 'span' else 'span') is None:
+                    this.p_process(unit)
+                #tq.update(1)
+            with open(file_to, "wb") as file:
+                file.write(soup.encode())
+            os.remove(file_from)
+            #tq.close()
+            return file_to
+
+
+def process_files(
+    configuration: ProcessingConfiguration,
+    origin_directory: str | Path,
+    output_directory: str | Path,
+) -> int:
+    origin = Path(origin_directory)
+    output = Path(output_directory)
+    if not origin.is_dir():
+        raise FileNotFoundError(f"Input directory does not exist: {origin}")
+    output.mkdir(parents=True, exist_ok=True)
+    remaker = ProcessUnit(configuration)
+    processed = 0
+    for source in sorted(origin.iterdir()):
+        if not source.is_file():
+            continue
+        remaker.remake_text(source, output / source.name)
+        processed += 1
+    return processed

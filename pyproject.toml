@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "text-evolver"
+version = "1.0.0"
+description = "Rewrite ebook and document files using configurable conversions"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "beautifulsoup4>=4.12,<5",
+    "EbookLib==0.18",
+    "fastapi>=0.115,<1",
+    "jinja2>=3.1,<4",
+    "itsdangerous>=2.2,<3",
+    "lxml>=5.3,<6",
+    "pillow>=11,<12",
+    "psutil>=7.2.2,<8",
+    "psycopg[binary]>=3.2,<4",
+    "pydantic-settings>=2.7,<3",
+    "pwdlib[argon2]>=0.2,<1",
+    "python-docx>=1.1,<2",
+    "python-multipart>=0.0.20,<1",
+    "requests>=2.32,<3",
+    "selenium==4.47.0",
+    "seleniumbase==4.52.3",
+    "sqlalchemy>=2.0.36,<3",
+    "uvicorn[standard]>=0.34,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx>=0.28,<1",
+    "pytest==9.1.1",
+    "pytest-cov>=6,<7",
+    "ruff>=0.9,<1",
+    "sqlacodegen>=3.0.0,<4",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+text_evolver = ["templates/*.html", "static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q -p no:rerunfailures"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["B008"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/text_evolver/db/models.py" = ["ALL"]
+"src/text_evolver/processing/processor.py" = ["E501", "E711", "E721", "E722", "UP015"]
+"src/text_evolver/processing/text_analysis.py" = ["B006", "E501", "E711", "E722"]

@@ -1,0 +1,63 @@
+{% extends "logged_basis.html" %}
+
+{% block main_content %}
+    <div class="row">
+        <div class="col">
+            {% if user.settings[0] is defined %} {# checking if there are elements at all #}
+            {% for setting in user.settings %}
+            <div class="row no-gutters" id="{{ setting.id }}">
+                <div class="col-auto">
+                    <p class="text_big set_number">{{ loop.index }}</p>
+                </div>
+                <div class="col">
+                    <a href="{{ url_for('setting', setting_id=setting.id) }}" class="text_usual set_link middle">{{ setting.name }}</a>
+                    <button onclick="Show_confirm(this)" class="text_usual control_buttons middle" style="visibility: visible;">Delete</button>
+                    <button onclick="Reject_confirm(this)" class="text_usual control_buttons middle" style="visibility: hidden;">Cancel</button>
+                    <button onclick="Delete_set(this)" class="text_usual control_buttons middle" name="{{ setting.id }}" style="visibility: hidden;">Confirm</button>
+                </div>
+            </div>
+            {% if loop.last %}
+                {% if loop.index==limit %}
+            <div class="row no-gutters">
+                <div class="col">
+                    <form action="{{ url_for('add_set') }}" method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <input type="submit" class="text_usual control_buttons" name="New_setting" value="Add new setting" disabled>
+                    </form>
+                </div>
+            </div>
+                {% else %}
+            <div class="row no-gutters">
+                <div class="col">
+                    <form action="{{ url_for('add_set') }}" method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <input type="submit" class="text_usual control_buttons" name="New_setting" value="Add new setting">
+                    </form>
+                </div>
+            </div>
+                {% endif %}
+            {% endif %}
+            {% endfor %}
+            {% else %}
+            <div class="row no-gutters">
+                <div class="col">
+                    <p class="text_usual set_link">You have no settings currently</p>
+                    <form action="{{ url_for('add_set') }}" method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <input type="submit" class="text_usual control_buttons" name="New_setting" value="Add new setting">
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="col-2">
+            {% for category, msg in messages %}
+                <p class="text_usual msg {{ category }}">{{msg}}</p>
+            {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+    </div>
+{% endblock %}
