@@ -12,12 +12,12 @@ class AppSettings(BaseSettings):
     secret_key: str = Field(min_length=32, validation_alias="SECRET_KEY")
     work_root: Path = Field(default=Path("var/work"), validation_alias="WORK_ROOT")
     temp_root: Path = Field(default=Path("var/tmp"), validation_alias="TEMP_ROOT")
-    chrome_user_data_dir: Path = Field(default=Path("var/chrome"), validation_alias="CHROME_USER_DATA_DIR")
     chrome_binary: str | None = Field(default=None, validation_alias="CHROME_BINARY")
     cookie_secure: bool = Field(default=False, validation_alias="COOKIE_SECURE")
     upload_limit_bytes: int = Field(default=26_214_400, ge=1, validation_alias="UPLOAD_LIMIT_BYTES")
     setting_limit_bytes: int = Field(default=536_870_912, ge=1, validation_alias="SETTING_LIMIT_BYTES")
     worker_poll_seconds: float = Field(default=2.0, ge=0.1, validation_alias="WORKER_POLL_SECONDS")
+    worker_concurrency: int = Field(default=1, ge=1, le=64, validation_alias="WORKER_CONCURRENCY")
     worker_min_free_memory_bytes: int = Field(
         default=805_306_368, ge=0, validation_alias="WORKER_MIN_FREE_MEMORY_BYTES"
     )
@@ -25,17 +25,16 @@ class AppSettings(BaseSettings):
     job_stale_seconds: int = Field(default=300, ge=30, validation_alias="JOB_STALE_SECONDS")
     results_per_page: int = Field(default=50, ge=1, le=200, validation_alias="RESULTS_PER_PAGE")
 
-    @field_validator("work_root", "temp_root", "chrome_user_data_dir", mode="after")
+    @field_validator("work_root", "temp_root", mode="after")
     @classmethod
     def resolve_path(cls, value: Path) -> Path:
         return value.expanduser().resolve()
 
     def ensure_directories(self) -> None:
-        for directory in (self.work_root, self.temp_root, self.chrome_user_data_dir):
+        for directory in (self.work_root, self.temp_root):
             directory.mkdir(parents=True, exist_ok=True)
 
 
 @lru_cache
-def get_settings() -> AppSettings:
+def get_application_settings() -> AppSettings:
     return AppSettings()
-

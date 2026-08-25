@@ -12,7 +12,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 from starlette.datastructures import UploadFile
 
-from text_evolver.config import AppSettings, get_settings
+from text_evolver.config import AppSettings, get_application_settings
 from text_evolver.db.models import ProcessingJob, Setting, UserAccount
 from text_evolver.db.session import get_db
 from text_evolver.services import (
@@ -158,7 +158,7 @@ async def logout_submit(request: Request, session: Session = Depends(get_db)) ->
 def my_settings(
     request: Request,
     session: Session = Depends(get_db),
-    app_settings: AppSettings = Depends(get_settings),
+    app_settings: AppSettings = Depends(get_application_settings),
 ) -> Response:
     user = authenticated(request, session)
     return render(
@@ -210,7 +210,7 @@ def search(
     page: int,
     request: Request,
     session: Session = Depends(get_db),
-    app_settings: AppSettings = Depends(get_settings),
+    app_settings: AppSettings = Depends(get_application_settings),
 ) -> Response:
     user = authenticated(request, session)
     phrase = "" if phrase == "_" else phrase
@@ -228,7 +228,7 @@ def setting_page(
     setting_id: int,
     request: Request,
     session: Session = Depends(get_db),
-    app_settings: AppSettings = Depends(get_settings),
+    app_settings: AppSettings = Depends(get_application_settings),
 ) -> Response:
     user = authenticated(request, session)
     setting = get_setting(session, setting_id)
@@ -250,7 +250,7 @@ async def setting_submit(
     setting_id: int,
     request: Request,
     session: Session = Depends(get_db),
-    app_settings: AppSettings = Depends(get_settings),
+    app_settings: AppSettings = Depends(get_application_settings),
 ) -> Response:
     user = authenticated(request, session)
     await validate_csrf(request)
@@ -304,7 +304,7 @@ async def terminate(request: Request, session: Session = Depends(get_db)) -> Res
 async def download_files(
     request: Request,
     session: Session = Depends(get_db),
-    app_settings: AppSettings = Depends(get_settings),
+    app_settings: AppSettings = Depends(get_application_settings),
 ) -> Response:
     user = authenticated(request, session)
     await validate_csrf(request)

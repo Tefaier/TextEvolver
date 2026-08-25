@@ -29,6 +29,10 @@ worker separately:
 .venv/bin/python -m text_evolver.worker
 ```
 
+Set `WORKER_CONCURRENCY` to the maximum number of jobs that the worker may run
+at once. It defaults to `1`; each additional slot can consume another document
+processing child process and Chromium instance.
+
 ## Database migrations and models
 
 Flyway SQL under `migrations/sql` is the schema authority. PostgreSQL is the
@@ -81,6 +85,19 @@ the only service that connects directly to PostgreSQL.
 Open <http://localhost:8000>. Health endpoints are available at
 `/health/live` and `/health/ready`.
 
+### Pokémon cache
+
+Before accepting jobs, the worker refreshes the Pokémon fandom cache under
+`TEMP_ROOT/Pokemons`. It loads the current Pokémon list, compares it with
+`pokemon.csv`, and visits detail pages only for entries that are absent or have
+a missing image. The CSV stores names, page and image URLs, local image paths,
+height, and weight; downloaded artwork is stored in `Pokemons/images`.
+
+The CSV is updated atomically after each successful download, so an interrupted
+first run resumes with the missing entries. A list-refresh failure leaves the
+existing cache intact. Document-processing children use only the CSV data and
+saved images; they do not start Selenium or make Pokémon network requests.
+
 Stop containers while retaining data:
 
 ```bash
@@ -103,8 +120,9 @@ This last command permanently removes the Compose-managed local data.
 ```
 
 The suite covers the Flyway SQLite baseline, schema parity, authentication,
-CSRF, settings and upload flows, text analysis, and all four document formats.
-Pokémon/Selenium network access is excluded from deterministic tests.
+CSRF, settings and upload flows, text analysis, all four document formats, and
+incremental Pokémon cache behavior. Pokémon/Selenium network access is mocked
+in deterministic tests.
 
 ## Important environment variables
 
@@ -114,10 +132,15 @@ Pokémon/Selenium network access is excluded from deterministic tests.
 | `SECRET_KEY` | Signs session cookies; minimum 32 characters |
 | `WORK_ROOT` | Shared job input/output directory |
 | `TEMP_ROOT` | Temporary processing directory |
-| `CHROME_USER_DATA_DIR` | Selenium browser profile directory |
 | `CHROME_BINARY` | Optional Chromium executable override |
 | `COOKIE_SECURE` | Enables HTTPS-only session cookies |
 | `UPLOAD_LIMIT_BYTES` | Total upload limit per job |
 | `WORKER_POLL_SECONDS` | Queue polling interval |
+| `WORKER_CONCURRENCY` | Maximum jobs processed concurrently by the worker (1-64) |
 | `WORKER_MIN_FREE_MEMORY_BYTES` | Memory threshold before claiming jobs |
 
+to explore:
+- services
+- pokemon_cache
+- text_analysis
+- processor

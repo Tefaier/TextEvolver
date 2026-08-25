@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
-from text_evolver.config import get_settings
+from text_evolver.config import get_application_settings
 from text_evolver.web.routes import router
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
@@ -14,12 +14,12 @@ PACKAGE_ROOT = Path(__file__).resolve().parent
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    get_settings().ensure_directories()
+    get_application_settings().ensure_directories()
     yield
 
 
 def create_app() -> FastAPI:
-    settings = get_settings()
+    settings = get_application_settings()
     application = FastAPI(title="TextEvolver", lifespan=lifespan)
     application.add_middleware(
         SessionMiddleware,

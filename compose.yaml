@@ -67,8 +67,6 @@ services:
       SECRET_KEY: ${SECRET_KEY}
       WORK_ROOT: /data/work
       TEMP_ROOT: /data/tmp
-      CHROME_USER_DATA_DIR: /data/chrome/app
-      CHROME_BINARY: /usr/bin/chromium
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       UPLOAD_LIMIT_BYTES: ${UPLOAD_LIMIT_BYTES:-26214400}
       SETTING_LIMIT_BYTES: ${SETTING_LIMIT_BYTES:-536870912}
@@ -78,7 +76,6 @@ services:
     volumes:
       - work-data:/data/work
       - temp-data:/data/tmp
-      - chrome-data:/data/chrome
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -94,16 +91,15 @@ services:
       SECRET_KEY: ${SECRET_KEY}
       WORK_ROOT: /data/work
       TEMP_ROOT: /data/tmp
-      CHROME_USER_DATA_DIR: /data/chrome/worker
       CHROME_BINARY: /usr/bin/chromium
       WORKER_POLL_SECONDS: ${WORKER_POLL_SECONDS:-2}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-1}
       WORKER_CANCEL_POLL_SECONDS: ${WORKER_CANCEL_POLL_SECONDS:-0.5}
       WORKER_MIN_FREE_MEMORY_BYTES: ${WORKER_MIN_FREE_MEMORY_BYTES:-805306368}
       JOB_STALE_SECONDS: ${JOB_STALE_SECONDS:-300}
     volumes:
       - work-data:/data/work
       - temp-data:/data/tmp
-      - chrome-data:/data/chrome
     depends_on:
       app:
         condition: service_healthy
@@ -113,5 +109,3 @@ volumes:
   postgres-data:
   work-data:
   temp-data:
-  chrome-data:
-

@@ -21,6 +21,7 @@ from text_evolver.db.models import (
     UnitConversion,
     UserAccount,
 )
+from text_evolver.fandoms import FandomName
 
 ALLOWED_EXTENSIONS = {"docx", "epub", "html", "fb2"}
 ACTIVE_JOB_STATUSES = {"queued", "running"}
@@ -145,7 +146,7 @@ def create_default_setting(session: Session, user_id: int) -> Setting:
     setting = Setting(owner_id=user_id, name="New_setting")
     session.add(setting)
     session.flush()
-    session.add(Fandom(setting_id=setting.id, name="Pokemons"))
+    session.add(Fandom(setting_id=setting.id, name=FandomName.POKEMONS))
     session.flush()
     return setting
 

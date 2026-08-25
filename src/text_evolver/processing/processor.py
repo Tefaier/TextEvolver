@@ -15,7 +15,7 @@ from docx.text.paragraph import Paragraph
 from ebooklib import epub
 
 from text_evolver.processing.binary_converter import convert_binary
-from text_evolver.processing.browser import HTML_IMAGE_STYLE, POKEMON_BASE_URL, POKEMON_LIST_PATH
+from text_evolver.processing.browser import HTML_IMAGE_STYLE
 from text_evolver.processing.images import get_image, get_pokemon_image
 
 #from tqdm import tqdm
@@ -33,8 +33,6 @@ from text_evolver.processing.text_analysis import (
 def values_reset(object):
     object.settings = {}
     object.pokemons_list = {}
-    object.pokemons_link = POKEMON_BASE_URL
-    object.pokemons_link_list = POKEMON_LIST_PATH
     object.units_list = {}
     object.word_conversions = {}
     object.direct_conversions = {}
@@ -58,16 +56,13 @@ def delete_paragraph(paragraph):
 
 
 def image_choser(obj: dict): # if link is chosen return None else return binary
-    try:
-        link = obj["link"]
-    except:
-        link = None
-    images_num = len(obj["binary"]) + (0 if link==None else 1)
+    official_image = obj.get("image_path")
+    images_num = len(obj["binary"]) + (0 if official_image is None else 1)
     random_num = random.randint(0, images_num - 1)
-    if link!=None and random_num==0:
+    if official_image is not None and random_num==0:
         return None
     else:
-        return obj["binary"][random_num - (0 if link==None else 1)]
+        return obj["binary"][random_num - (0 if official_image is None else 1)]
 
 
 def image_insert(object, unit, image_data: str):
@@ -108,9 +103,6 @@ class ProcessUnit:
     html_image_style: str
     file_type: str
     mutations_string: str
-    pokemons_link: str
-    pokemons_link_list: str
-
     word_counter: int
 
     #feet_case: bool
@@ -131,7 +123,15 @@ class ProcessUnit:
                 key = list(filter(lambda x: x[0] == result[0].lower(), self.pokemons_navigation_map))[0][1]
                 item = self.pokemons_list[key]
                 if (item["last word"] == None) or (item["last word"] + item["separation"] < self.word_counter and item["separation"] != 1):
-                        image_data = get_pokemon_image(key, self.settings, item["link"], image_choser(item), item["explanation"])
+                        image_data = get_pokemon_image(
+                            key,
+                            self.settings,
+                            item["image_path"],
+                            item["height"],
+                            item["weight"],
+                            image_choser(item),
+                            item["explanation"],
+                        )
                         if image_data != None:
                             self.pokemons_list[key]["last word"] = self.word_counter
                             image_insert(self, unit, image_data)
@@ -283,6 +283,7 @@ def process_files(
     origin_directory: str | Path,
     output_directory: str | Path,
 ) -> int:
+    '''Entry poing of processing files based on configuration'''
     origin = Path(origin_directory)
     output = Path(output_directory)
     if not origin.is_dir():

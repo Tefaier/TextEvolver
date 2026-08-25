@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///var/test-bootstrap.db")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-with-at-least-thirty-two-characters")
 
-from text_evolver.config import AppSettings, get_settings  # noqa: E402
+from text_evolver.config import AppSettings, get_application_settings  # noqa: E402
 from text_evolver.db.session import get_db  # noqa: E402
 from text_evolver.main import create_app  # noqa: E402
 
@@ -37,7 +37,6 @@ def app_settings(tmp_path: Path, database) -> AppSettings:
         secret_key="test-secret-key-with-at-least-thirty-two-characters",
         work_root=tmp_path / "work",
         temp_root=tmp_path / "tmp",
-        chrome_user_data_dir=tmp_path / "chrome",
         worker_min_free_memory_bytes=0,
     )
     settings.ensure_directories()
@@ -58,7 +57,7 @@ def client(database, app_settings: AppSettings) -> Generator[TestClient, None, N
                 raise
 
     application.dependency_overrides[get_db] = database_override
-    application.dependency_overrides[get_settings] = lambda: app_settings
+    application.dependency_overrides[get_application_settings] = lambda: app_settings
     with TestClient(application) as test_client:
         yield test_client
 
@@ -78,4 +77,3 @@ def registered_client(client: TestClient) -> TestClient:
     )
     assert response.status_code == 200
     return client
-

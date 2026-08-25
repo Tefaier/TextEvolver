@@ -1,3 +1,4 @@
+import threading
 from contextlib import contextmanager
 
 from sqlalchemy.orm import Session
@@ -19,7 +20,7 @@ def install_worker_database(monkeypatch, database, app_settings):
                 raise
 
     monkeypatch.setattr(worker, "session_scope", test_session_scope)
-    monkeypatch.setattr(worker, "get_settings", lambda: app_settings)
+    monkeypatch.setattr(worker, "get_application_settings", lambda: app_settings)
 
 
 def create_queued_job(database) -> int:
@@ -83,3 +84,30 @@ def test_queued_cancellation_and_restart_recovery(monkeypatch, database, app_set
         assert recovered.status == "queued"
         assert recovered.error_message is not None
         assert "returned to the queue" in recovered.error_message
+
+
+def test_worker_pool_runs_configured_jobs_in_parallel(monkeypatch, app_settings):
+    settings = app_settings.model_copy(update={"worker_concurrency": 3})
+    stopping = threading.Event()
+    jobs = [worker.ClaimedJob(id=value, setting_id=value) for value in range(1, 4)]
+    lock = threading.Lock()
+    barrier = threading.Barrier(settings.worker_concurrency)
+    processed: dict[int, str] = {}
+
+    def claim_job():
+        with lock:
+            return jobs.pop() if jobs else None
+
+    def run_claimed_job(job, _settings):
+        processed[job.id] = threading.current_thread().name
+        barrier.wait(timeout=5)
+        if len(processed) == settings.worker_concurrency:
+            stopping.set()
+
+    monkeypatch.setattr(worker, "claim_job", claim_job)
+    monkeypatch.setattr(worker, "run_claimed_job", run_claimed_job)
+
+    worker.run_worker_pool(settings, stopping)
+
+    assert set(processed) == {1, 2, 3}
+    assert len(set(processed.values())) == settings.worker_concurrency

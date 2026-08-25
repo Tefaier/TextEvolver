@@ -5,20 +5,23 @@ import logging
 import multiprocessing
 import shutil
 import signal
-import time
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 import psutil
 from sqlalchemy import select, update
 
-from text_evolver.config import get_settings
+from text_evolver.config import AppSettings, get_application_settings
 from text_evolver.db.models import ProcessingJob
 from text_evolver.db.session import session_scope
+from text_evolver.processing.pokemon_cache import refresh_pokemon_cache
 from text_evolver.processing.processor import process_files
 from text_evolver.processing.settings_loader import ProcessingConfiguration, load_processing_configuration
 from text_evolver.services import job_paths
 
 LOGGER = logging.getLogger("text_evolver.worker")
+PROCESS_CONTEXT = multiprocessing.get_context("spawn")
 
 
 @dataclass(frozen=True)
@@ -70,9 +73,9 @@ def claim_job() -> ClaimedJob | None:
         return ClaimedJob(job.id, job.setting_id)
 
 
-def load_configuration(setting_id: int) -> ProcessingConfiguration:
+def load_configuration(setting_id: int, settings: AppSettings) -> ProcessingConfiguration:
     with session_scope() as session:
-        return load_processing_configuration(session, setting_id)
+        return load_processing_configuration(session, setting_id, settings.temp_root)
 
 
 def cancellation_requested(job_id: int) -> bool:
@@ -95,17 +98,17 @@ def finish_job(job_id: int, status: str, error: str | None = None) -> None:
         job.error_message = error[:4000] if error else None
 
 
-def run_claimed_job(job: ClaimedJob) -> None:
-    settings = get_settings()
+def run_claimed_job(job: ClaimedJob, settings: AppSettings | None = None) -> None:
+    settings = settings or get_application_settings()
     root, origin, output = job_paths(settings, job.id)
     try:
-        configuration = load_configuration(job.setting_id)
+        configuration = load_configuration(job.setting_id, settings)
     except Exception as exc:
         LOGGER.exception("Unable to load settings for job %s", job.id)
         finish_job(job.id, "failed", str(exc))
         return
 
-    process = multiprocessing.Process(
+    process = PROCESS_CONTEXT.Process(
         target=process_files,
         args=(configuration, origin, output),
         name=f"text-evolver-job-{job.id}",
@@ -131,35 +134,84 @@ def run_claimed_job(job: ClaimedJob) -> None:
         shutil.rmtree(root, ignore_errors=True)
 
 
+def run_worker_slot(slot: int, settings: AppSettings, stopping: threading.Event) -> None:
+    LOGGER.info("Worker slot %s started", slot)
+    while not stopping.is_set():
+        if psutil.virtual_memory().available < settings.worker_min_free_memory_bytes:
+            stopping.wait(settings.worker_poll_seconds)
+            continue
+        try:
+            job = claim_job()
+        except Exception:
+            LOGGER.exception("Worker slot %s could not claim a job", slot)
+            stopping.wait(settings.worker_poll_seconds)
+            continue
+        if job is None:
+            stopping.wait(settings.worker_poll_seconds)
+            continue
+        LOGGER.info("Worker slot %s processing job %s", slot, job.id)
+        try:
+            run_claimed_job(job, settings)
+        except Exception as exc:
+            LOGGER.exception("Worker slot %s failed while supervising job %s", slot, job.id)
+            try:
+                finish_job(job.id, "failed", str(exc))
+            except Exception:
+                LOGGER.exception("Worker slot %s could not mark job %s as failed", slot, job.id)
+    LOGGER.info("Worker slot %s stopped", slot)
+
+
+def run_worker_pool(settings: AppSettings, stopping: threading.Event) -> None:
+    with ThreadPoolExecutor(
+        max_workers=settings.worker_concurrency,
+        thread_name_prefix="text-evolver-worker",
+    ) as executor:
+        futures = [
+            executor.submit(run_worker_slot, slot, settings, stopping)
+            for slot in range(1, settings.worker_concurrency + 1)
+        ]
+        try:
+            while not stopping.wait(1):
+                for future in futures:
+                    if future.done():
+                        future.result()
+                        raise RuntimeError("A worker slot stopped unexpectedly")
+        finally:
+            stopping.set()
+            for future in futures:
+                future.result()
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
-    settings = get_settings()
+    settings = get_application_settings()
     settings.ensure_directories()
     recovered = recover_interrupted_jobs()
     if recovered:
         LOGGER.warning("Returned %s interrupted job(s) to the queue", recovered)
-    stopping = False
+    try:
+        cache_refresh = refresh_pokemon_cache(settings.temp_root)
+    except Exception:
+        LOGGER.exception("Unable to refresh the Pokémon cache; existing cache data will remain available")
+    else:
+        LOGGER.info(
+            "Pokémon cache ready: %s listed, %s retained, %s downloaded, %s failed",
+            cache_refresh.listed,
+            cache_refresh.retained,
+            cache_refresh.downloaded,
+            cache_refresh.failed,
+        )
+    stopping = threading.Event()
 
     def stop(_: int, __: object) -> None:
-        nonlocal stopping
-        stopping = True
+        stopping.set()
 
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
-    LOGGER.info("Worker started")
-    while not stopping:
-        if psutil.virtual_memory().available < settings.worker_min_free_memory_bytes:
-            time.sleep(settings.worker_poll_seconds)
-            continue
-        job = claim_job()
-        if job is None:
-            time.sleep(settings.worker_poll_seconds)
-            continue
-        LOGGER.info("Processing job %s", job.id)
-        run_claimed_job(job)
+    LOGGER.info("Worker started with %s parallel job slot(s)", settings.worker_concurrency)
+    run_worker_pool(settings, stopping)
     LOGGER.info("Worker stopped")
 
 
 if __name__ == "__main__":
     main()
-

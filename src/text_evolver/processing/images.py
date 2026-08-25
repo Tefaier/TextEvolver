@@ -1,13 +1,13 @@
 from io import BytesIO
+from math import ceil
 from pathlib import Path
 
-import requests
 from PIL import Image, ImageDraw, ImageFont
-from selenium.common.exceptions import NoSuchElementException
-from selenium.webdriver.common.by import By
 
 from text_evolver.processing.binary_converter import convert_binary
-from text_evolver.processing.browser import build_driver
+
+CAPTION_PADDING = 6
+CAPTION_SPACING = 4
 
 
 def _font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
@@ -17,27 +17,80 @@ def _font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         return ImageFont.load_default()
 
 
+def _text_width(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont) -> int:
+    bounds = draw.textbbox((0, 0), text, font=font)
+    return ceil(bounds[2] - bounds[0])
+
+
+def _wrap_text(text: str, font: ImageFont.ImageFont, max_width: int) -> str:
+    """Wrap at word boundaries using rendered pixel width, preserving explicit newlines."""
+    draw = ImageDraw.Draw(Image.new("L", (1, 1)))
+    lines: list[str] = []
+    for paragraph in text.splitlines() or [""]:
+        words = paragraph.split()
+        if not words:
+            lines.append("")
+            continue
+
+        line = words[0]
+        for word in words[1:]:
+            candidate = f"{line} {word}"
+            if _text_width(draw, candidate, font) <= max_width:
+                line = candidate
+            else:
+                lines.append(line)
+                line = word
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _caption_image(text: str, font: ImageFont.ImageFont, max_width: int) -> Image.Image:
+    wrapped_text = _wrap_text(text, font, max(1, max_width - (CAPTION_PADDING * 2)))
+    measuring_draw = ImageDraw.Draw(Image.new("L", (1, 1)))
+    bounds = measuring_draw.multiline_textbbox(
+        (0, 0),
+        wrapped_text,
+        font=font,
+        spacing=CAPTION_SPACING,
+        align="center",
+    )
+    text_width = ceil(bounds[2] - bounds[0])
+    text_height = ceil(bounds[3] - bounds[1])
+    label = Image.new(
+        "RGB",
+        (text_width + (CAPTION_PADDING * 2), text_height + (CAPTION_PADDING * 2)),
+        "white",
+    )
+    ImageDraw.Draw(label).multiline_text(
+        (CAPTION_PADDING - bounds[0], CAPTION_PADDING - bounds[1]),
+        wrapped_text,
+        fill="black",
+        font=font,
+        spacing=CAPTION_SPACING,
+        align="center",
+    )
+    return label
+
+
 def get_image(binary: object, name: str, text1: str, text2: str) -> str | None:
     """Compose captions with Pillow only; no display or temporary EPS file is required."""
     try:
         source = Image.open(BytesIO(convert_binary(binary, "PIL"))).convert("RGB")
-        bottom_height = 44 if text1 else 0
-        right_width = 44 if text2 else 0
-        canvas = Image.new("RGB", (source.width + right_width, source.height + bottom_height), "white")
-        canvas.paste(source, (0, 0))
-        draw = ImageDraw.Draw(canvas)
-        if text1:
-            font = _font(30)
-            bounds = draw.textbbox((0, 0), text1, font=font)
-            width = bounds[2] - bounds[0]
-            draw.text(((source.width - width) / 2, source.height + 4), text1, fill="black", font=font)
-        if text2:
-            font = _font(27)
-            bounds = draw.textbbox((0, 0), text2, font=font)
-            label = Image.new("RGBA", (bounds[2] - bounds[0] + 10, bounds[3] - bounds[1] + 10), "white")
-            ImageDraw.Draw(label).text((5, 5), text2, fill="black", font=font)
-            label = label.rotate(90, expand=True)
-            canvas.paste(label.convert("RGB"), (source.width, max(0, (source.height - label.height) // 2)))
+        bottom_label = _caption_image(text1, _font(30), source.width) if text1 else None
+        right_label = _caption_image(text2, _font(27), source.height).rotate(90, expand=True) if text2 else None
+
+        left_width = max(source.width, bottom_label.width if bottom_label else 0)
+        top_height = max(source.height, right_label.height if right_label else 0)
+        right_width = right_label.width if right_label else 0
+        bottom_height = bottom_label.height if bottom_label else 0
+        canvas = Image.new("RGB", (left_width + right_width, top_height + bottom_height), "white")
+
+        source_position = ((left_width - source.width) // 2, (top_height - source.height) // 2)
+        canvas.paste(source, source_position)
+        if bottom_label:
+            canvas.paste(bottom_label, ((left_width - bottom_label.width) // 2, top_height))
+        if right_label:
+            canvas.paste(right_label, (left_width, (top_height - right_label.height) // 2))
         output = BytesIO()
         canvas.save(output, format="JPEG", quality=90)
         return convert_binary(output.getvalue(), "string")
@@ -48,50 +101,25 @@ def get_image(binary: object, name: str, text1: str, text2: str) -> str | None:
 def get_pokemon_image(
     key: str,
     settings: dict[str, object],
-    link: str,
+    image_path: str | Path,
+    height: str,
+    weight: str,
     binary: object | None = None,
     text2: str | None = None,
 ) -> str | None:
-    driver = None
     try:
-        driver = build_driver()
-        driver.get(link)
-        try:
-            tab = driver.find_element(By.XPATH, f"//div[@class='sv-tabs-tab-list']/a[text()='{key}']")
-            if tab.is_displayed():
-                tab.click()
-        except NoSuchElementException:
-            pass
-        artwork_link = driver.find_element(
-            By.XPATH,
-            "//div[@class='sv-tabs-panel-list']//following-sibling::div[@class='sv-tabs-panel active']//a",
-        ).get_attribute("href")
-        response = requests.get(artwork_link, timeout=30)
-        response.raise_for_status()
+        source = Path(image_path).read_bytes() if binary is None else binary
         caption = text2 or ""
         if text2 is None:
             values: list[str] = []
-            if settings.get("show_pokemon_height"):
-                value = driver.find_element(
-                    By.XPATH,
-                    "//div[@class='sv-tabs-panel-list']//following-sibling::div[@class='sv-tabs-panel active']"
-                    "//th[text()='Height']//parent::tr//td",
-                )
-                values.append(str(value.text).rsplit("(", 1)[0].strip())
-            if settings.get("show_pokemon_weight"):
-                value = driver.find_element(
-                    By.XPATH,
-                    "//div[@class='sv-tabs-panel-list']//following-sibling::div[@class='sv-tabs-panel active']"
-                    "//th[text()='Weight']//parent::tr//td",
-                )
-                values.append(str(value.text).rsplit("(", 1)[0].strip())
+            if settings.get("show_pokemon_height") and height:
+                values.append(height)
+            if settings.get("show_pokemon_weight") and weight:
+                values.append(weight)
             caption = "  ".join(values)
-        return get_image(response.content if binary is None else binary, key, key, caption)
+        return get_image(source, key, key, caption)
     except Exception:
         return None
-    finally:
-        if driver is not None:
-            driver.quit()
 
 
 def get_image_binary(path: str | Path) -> str | None:
@@ -102,4 +130,3 @@ def get_image_binary(path: str | Path) -> str | None:
         return convert_binary(output.getvalue(), "string")
     except Exception:
         return None
-

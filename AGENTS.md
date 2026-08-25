@@ -35,8 +35,8 @@ docker compose up --build
   application behavior or manual fixes to it.
 - `src/text_evolver/processing/` contains the format-specific rewriting and
   headless image/Selenium integrations.
-- `src/text_evolver/worker.py` claims queued jobs and supervises one child
-  process at a time.
+- `src/text_evolver/worker.py` runs a configurable thread pool; each slot
+  transactionally claims a queued job and supervises its own processing child.
 - `migrations/sql/{postgresql,sqlite}/` contains matching Flyway migrations.
 
 ## Runtime architecture
@@ -47,10 +47,16 @@ directly to PostgreSQL. SQLAlchemy uses `NullPool` and disables psycopg prepared
 statements because PgBouncer owns pooling.
 
 The API saves uploads under `WORK_ROOT/<job_id>/origin_files` and inserts a
-`processing_job` row. The worker atomically claims a queued row, loads a plain
-processing configuration, and spawns a child for document processing. The API
-requests cancellation in the database; only the worker terminates its child.
-Completed output is stored in `new_files` until the user downloads it.
+`processing_job` row. Each of the worker's `WORKER_CONCURRENCY` thread-pool
+slots atomically claims a queued row, loads a plain processing configuration,
+and spawns a child for document processing. The API requests cancellation in
+the database; only the owning worker slot terminates its child. Completed
+output is stored in `new_files` until the user downloads it.
+
+Before starting the thread pool, the worker refreshes Pokémon data under
+`TEMP_ROOT/Pokemons`. `pokemon.csv` and `Pokemons/images/` are the processing
+source; job children must not scrape Pokémon pages. Refreshes compare the live
+list with valid cached rows and download only missing entries.
 
 One worker replica is supported. On startup it returns interrupted `running`
 jobs to `queued`.
@@ -100,6 +106,7 @@ back into original words to preserve punctuation and capitalization. Preserve
 the behavior of `text_cleaner`, `find_in_clean`, `text2int`, and
 `replace_iteration` when refactoring.
 
-Image captioning uses Pillow and must remain headless. All Selenium driver
-construction goes through `processing/browser.py`; always close drivers and
-keep network-dependent Pokémon behavior mockable in tests.
+Image captioning uses Pillow and must remain headless. Selenium is used only by
+the worker-start Pokémon cache refresh. Driver construction goes through
+`processing/browser.py`, uses no custom user profile, and must always close the
+driver. Keep cache refresh network behavior mockable in tests.
