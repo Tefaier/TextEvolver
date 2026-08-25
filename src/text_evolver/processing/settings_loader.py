@@ -104,12 +104,14 @@ def configure_process_unit(unit: object, configuration: ProcessingConfiguration)
         }
     )
     for fandom in configuration.fandoms:
-        if fandom["name"] == FandomName.POKEMONS:
-            unit.settings["pokemon"] = bool(fandom["active"] and configuration.pokemons)
-            if unit.settings["pokemon"]:
-                unit.settings["show_pokemon_weight"] = fandom["support_value_1"]
-                unit.settings["show_pokemon_height"] = fandom["support_value_2"]
-                _load_pokemons(unit, configuration.pokemons, int(fandom["separation"]))
+        match fandom["name"]:
+            case FandomName.POKEMONS:
+                active_and_loaded = bool(fandom["active"] and configuration.pokemons)
+                unit.settings["pokemon"] = active_and_loaded
+                if active_and_loaded:
+                    unit.settings["show_pokemon_weight"] = fandom["support_value_1"]
+                    unit.settings["show_pokemon_height"] = fandom["support_value_2"]
+                    _load_pokemons(unit, configuration.pokemons, int(fandom["separation"]))
     for value in configuration.units:
         unit.units_list[value["phrase_from"]] = {
             "split": str(value["phrase_to"]).split(" "),
