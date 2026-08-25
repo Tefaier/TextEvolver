@@ -81,4 +81,5 @@ def test_queued_cancellation_and_restart_recovery(monkeypatch, database, app_set
         recovered = session.get(ProcessingJob, job_id)
         assert recovered is not None
         assert recovered.status == "queued"
+        assert recovered.error_message is not None
         assert "returned to the queue" in recovered.error_message

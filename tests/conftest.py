@@ -33,12 +33,12 @@ def database(tmp_path: Path):
 @pytest.fixture
 def app_settings(tmp_path: Path, database) -> AppSettings:
     settings = AppSettings(
-        DATABASE_URL=str(database.url),
-        SECRET_KEY="test-secret-key-with-at-least-thirty-two-characters",
-        WORK_ROOT=tmp_path / "work",
-        TEMP_ROOT=tmp_path / "tmp",
-        CHROME_USER_DATA_DIR=tmp_path / "chrome",
-        WORKER_MIN_FREE_MEMORY_BYTES=0,
+        database_url=str(database.url),
+        secret_key="test-secret-key-with-at-least-thirty-two-characters",
+        work_root=tmp_path / "work",
+        temp_root=tmp_path / "tmp",
+        chrome_user_data_dir=tmp_path / "chrome",
+        worker_min_free_memory_bytes=0,
     )
     settings.ensure_directories()
     return settings
