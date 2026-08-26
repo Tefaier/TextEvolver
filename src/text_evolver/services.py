@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import datetime as dt
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,9 @@ ALLOWED_EXTENSIONS = {"docx", "epub", "html", "fb2"}
 ACTIVE_JOB_STATUSES = {"queued", "running"}
 TRUTHY = {"true", "1", "yes", "on"}
 FALSY = {"false", "0", "no", "off"}
+IMAGE_UPLOAD_CHUNK_BYTES = 1024 * 1024
+IMAGE_UPLOAD_FIELD_PREFIX = "image_files_"
+IMAGE_ROW_TOKEN_PATTERN = re.compile(r"[a-zA-Z0-9_-]{1,80}")
 
 
 class ValidationError(ValueError):
@@ -252,6 +256,16 @@ class RowChanges:
     added: tuple[dict[str, Any], ...]
 
 
+@dataclass(frozen=True)
+class ImageSubmission:
+    phrase: str
+    separation: int
+    explanation: str
+    mutations: bool
+    existing_images: str
+    uploads: tuple[UploadFile, ...]
+
+
 def _calculate_row_changes(
     existing: list[Any], submitted: list[dict[str, Any]], fields: tuple[str, ...]
 ) -> RowChanges:
@@ -280,6 +294,107 @@ def _apply_relation_changes(session: Session, setting_id: int, model: type[Any],
     for row in changes.removed:
         session.delete(row)
     session.add_all(model(setting_id=setting_id, **values) for values in changes.added)
+
+
+def _upload_size(upload: UploadFile) -> int:
+    if upload.size is None:
+        raise ValidationError(f"Cannot determine the size of uploaded image '{upload.filename}'")
+    if upload.size <= 0:
+        raise ValidationError(f"Uploaded image '{upload.filename}' is empty")
+    return upload.size
+
+
+def _encoded_images_size(images: str) -> int:
+    """Estimation of decoded images size"""
+    return len(images) // 4 * 3
+
+
+async def _read_upload_with_limit(upload: UploadFile, available_bytes: int) -> bytes:
+    """Read a known-size upload in bounded chunks without crossing the available byte budget."""
+    expected_size = _upload_size(upload)
+    await upload.seek(0)
+    output = bytearray()
+    while len(output) < expected_size:
+        read_size = min(IMAGE_UPLOAD_CHUNK_BYTES, expected_size - len(output), available_bytes - len(output))
+        if read_size <= 0:
+            raise ValidationError("Images exceed the configured setting size limit")
+        chunk = await upload.read(read_size)
+        if not chunk:
+            raise ValidationError(f"Uploaded image '{upload.filename}' could not be read completely")
+        output.extend(chunk)
+    return bytes(output)
+
+
+def _parse_image_submissions(form: Any, old_images: dict[str, str]) -> list[ImageSubmission]:
+    tokens, phrases, separations, explanations, image_mutations = _aligned(
+        form, ["image_token", "image_phrase", "image_separation", "image_expl", "image_mutations"]
+    )
+    submissions: list[ImageSubmission] = []
+    used_tokens: set[str] = set()
+    for index, submitted_phrase in enumerate(phrases):
+        phrase = str(submitted_phrase).strip()
+        if not phrase:
+            continue
+        token = str(tokens[index])
+        if IMAGE_ROW_TOKEN_PATTERN.fullmatch(token) is None or token in used_tokens:
+            raise ValidationError("Image conversion row identifier is invalid")
+        used_tokens.add(token)
+        uploads = tuple(
+            value
+            for value in _values(form, IMAGE_UPLOAD_FIELD_PREFIX + token)
+            if isinstance(value, UploadFile) and value.filename
+        )
+        existing_image_data = old_images.get(token, "")
+        if not uploads and not existing_image_data:
+            raise ValidationError(f"Image conversion '{phrase}' requires an image")
+        submissions.append(
+            ImageSubmission(
+                phrase=phrase,
+                separation=max(1, int(separations[index])),
+                explanation=str(explanations[index]),
+                mutations=parse_bool(image_mutations[index], "image_mutations"),
+                existing_images=existing_image_data,
+                uploads=uploads,
+            )
+        )
+    return submissions
+
+
+async def _materialize_image_submissions(
+    submissions: list[ImageSubmission], setting_limit_bytes: int
+) -> list[dict[str, Any]]:
+    reused_image_bytes = sum(
+        _encoded_images_size(value.existing_images) for value in submissions if not value.uploads
+    )
+    expected_upload_bytes = sum(_upload_size(upload) for value in submissions for upload in value.uploads)
+    if reused_image_bytes + expected_upload_bytes > setting_limit_bytes:
+        raise ValidationError("Images exceed the configured setting size limit")
+
+    submitted_images: list[dict[str, Any]] = []
+    uploaded_image_bytes = 0
+    upload_budget = setting_limit_bytes - reused_image_bytes
+    for value in submissions:
+        images = value.existing_images
+        if value.uploads:
+            encoded_images: list[str] = []
+            for upload in value.uploads:
+                data = await _read_upload_with_limit(
+                    upload,
+                    upload_budget - uploaded_image_bytes,
+                )
+                uploaded_image_bytes += len(data)
+                encoded_images.append(base64.b64encode(data).decode("ascii"))
+            images = "*".join(encoded_images)
+        submitted_images.append(
+            {
+                "phrase": value.phrase,
+                "separation": value.separation,
+                "explanation": value.explanation,
+                "mutations": value.mutations,
+                "images": images,
+            }
+        )
+    return submitted_images
 
 
 async def update_setting_from_form(
@@ -317,9 +432,7 @@ async def update_setting_from_form(
             select(ImageConversion).where(ImageConversion.setting_id == setting_id).order_by(ImageConversion.id)
         )
     )
-    old_images: dict[str, list[str]] = {}
-    for value in existing_images:
-        old_images.setdefault(value.phrase, []).append(value.images)
+    old_images = {f"existing-{value.id}": value.images for value in existing_images}
 
     fandom, active, separation, value_1, value_2 = _aligned(
         form, ["fandom", "fandom_active", "fandom_separation", "fandom_value_1", "fandom_value_2"]
@@ -368,37 +481,8 @@ async def update_setting_from_form(
                 }
             )
 
-    origins, phrases, separations, explanations, image_mutations = _aligned(
-        form, ["image_origin_name", "image_phrase", "image_separation", "image_expl", "image_mutations"]
-    )
-    uploads = [value for value in _values(form, "image_files") if isinstance(value, UploadFile) and value.filename]
-    upload_index = 0
-    total_image_bytes = 0
-    submitted_images: list[dict[str, Any]] = []
-    for index, phrase in enumerate(phrases):
-        phrase = str(phrase).strip()
-        if not phrase:
-            continue
-        matching_images = old_images.get(str(origins[index]), [])
-        images = matching_images.pop(0) if matching_images else ""
-        if upload_index < len(uploads):
-            data = await uploads[upload_index].read()
-            upload_index += 1
-            total_image_bytes += len(data)
-            images = base64.b64encode(data).decode("ascii")
-        if not images:
-            raise ValidationError(f"Image conversion '{phrase}' requires an image")
-        submitted_images.append(
-            {
-                "phrase": phrase,
-                "separation": max(1, int(separations[index])),
-                "explanation": str(explanations[index]),
-                "mutations": parse_bool(image_mutations[index], "image_mutations"),
-                "images": images,
-            }
-        )
-    if total_image_bytes > settings.setting_limit_bytes:
-        raise ValidationError("Images exceed the configured setting size limit")
+    image_submissions = _parse_image_submissions(form, old_images)
+    submitted_images = await _materialize_image_submissions(image_submissions, settings.setting_limit_bytes)
 
     row_changes = (
         (

@@ -65,7 +65,7 @@
         <div class="row" id="default_image"> {# image reference #}
             <div class="col-2">
                 <label class="data_heading">Image add</label>
-                <input value="Origin phrase" name="image_origin_name" type="hidden">
+                <input value="" name="image_token" type="hidden">
                 <button type="button" onclick="Delete_part(this)" class="control_buttons">Delete</button>
             </div>
             <div class="col">
@@ -90,8 +90,7 @@
                 </div>
                 <div class="data_info">
                     <label>Images</label>
-                    <input name="image_files" type="file" accept="image/*" multiple>
-                    <input name="image_files" type="file" accept="image/*" multiple hidden>
+                    <input type="file" accept="image/*" multiple>
                 </div>
             </div>
         </div>
@@ -387,7 +386,7 @@
                 <div class="row">
                     <div class="col-2">
                         <label class="data_heading">Image add</label>
-                        <input value="{{ image_conv.phrase }}" name="image_origin_name" type="hidden">
+                        <input value="existing-{{ image_conv.id }}" name="image_token" type="hidden">
                         <button type="button" onclick="Delete_part(this)" class="control_buttons">Delete</button>
                     </div>
                     <div class="col"> {# information of image_conv #}
@@ -417,8 +416,7 @@
                         </div>
                         <div class="data_info"> {# image_conv.images #}
                             <label>Images</label>
-                            <input name="image_files" type="file" accept="image/*" multiple>
-                            <input name="image_files" type="file" accept="image/*" multiple hidden>
+                            <input name="image_files_existing-{{ image_conv.id }}" type="file" accept="image/*" multiple>
                         </div>
                     </div>
                 </div>

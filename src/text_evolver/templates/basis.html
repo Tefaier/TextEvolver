@@ -97,17 +97,21 @@
                     row_p.parentNode.insertBefore(newHr, row_p);
                 }
 	        }
+	        let imageRowCounter = 0;
 	        function Add_image(but){
-                const div = document.querySelector("[id='default_image']");
-                if (div != null){
-                    const clone = div.cloneNode(true);
-                    clone.removeAttribute('id');
-                    const row_p = but.parentNode.parentNode;
+	                const div = document.querySelector("[id='default_image']");
+	                if (div != null){
+	                    const clone = div.cloneNode(true);
+	                    clone.removeAttribute('id');
+	                    const token = `new-${Date.now()}-${imageRowCounter++}`;
+	                    clone.querySelector("[name='image_token']").value = token;
+	                    clone.querySelector("input[type='file']").name = `image_files_${token}`;
+	                    const row_p = but.parentNode.parentNode;
                     row_p.parentNode.insertBefore(clone, row_p);
                     const newHr = document.createElement("hr");
                     newHr.classList.add("new");
                     row_p.parentNode.insertBefore(newHr, row_p);
-                }
+	                }
 	        }
 	        function Add_text(but){
                 const div = document.querySelector("[id='default_text']");

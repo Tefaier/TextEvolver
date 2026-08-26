@@ -1,9 +1,12 @@
 import asyncio
+import base64
+from io import BytesIO
 from types import SimpleNamespace
 
+import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from starlette.datastructures import FormData
+from starlette.datastructures import FormData, UploadFile
 
 from text_evolver.db.models import (
     Fandom,
@@ -13,7 +16,24 @@ from text_evolver.db.models import (
     UnitConversion,
     UserAccount,
 )
-from text_evolver.services import _calculate_row_changes, update_setting_from_form
+from text_evolver.services import (
+    ImageSubmission,
+    ValidationError,
+    _calculate_row_changes,
+    _materialize_image_submissions,
+    _read_upload_with_limit,
+    update_setting_from_form,
+)
+
+
+class TrackingUploadFile(UploadFile):
+    def __init__(self, data: bytes, filename: str):
+        super().__init__(BytesIO(data), size=len(data), filename=filename)
+        self.read_sizes: list[int] = []
+
+    async def read(self, size: int = -1) -> bytes:
+        self.read_sizes.append(size)
+        return await super().read(size)
 
 
 def test_calculate_row_changes_matches_duplicate_values_one_for_one():
@@ -30,6 +50,36 @@ def test_calculate_row_changes_matches_duplicate_values_one_for_one():
     assert changes.preserved == (first,)
     assert changes.removed == (second, removed)
     assert changes.added == ({"value": "added"},)
+
+
+def test_oversized_upload_is_rejected_before_content_is_read():
+    upload = TrackingUploadFile(b"123456", "large.png")
+
+    with pytest.raises(ValidationError, match="size limit"):
+        asyncio.run(_read_upload_with_limit(upload, expected_size=6, available_bytes=5))
+
+    assert upload.read_sizes == []
+
+
+def test_empty_upload_is_rejected_before_content_is_read():
+    upload = TrackingUploadFile(b"", "empty.png")
+
+    with pytest.raises(ValidationError, match="is empty"):
+        asyncio.run(_read_upload_with_limit(upload, expected_size=0, available_bytes=5))
+
+    assert upload.read_sizes == []
+
+
+def test_combined_upload_size_is_checked_before_any_content_is_read():
+    first = TrackingUploadFile(b"1234", "first.png")
+    second = TrackingUploadFile(b"5678", "second.png")
+    submission = ImageSubmission("Example", 1, "", False, "", (first, second))
+
+    with pytest.raises(ValidationError, match="size limit"):
+        asyncio.run(_materialize_image_submissions([submission], setting_limit_bytes=7))
+
+    assert first.read_sizes == []
+    assert second.read_sizes == []
 
 
 def test_update_setting_preserves_unchanged_rows(database, app_settings):
@@ -75,9 +125,17 @@ def test_update_setting_preserves_unchanged_rows(database, app_settings):
             separation=50,
             explanation="Electric mouse",
             mutations=True,
-            images="encoded-image",
+            images=base64.b64encode(b"existing").decode("ascii"),
         )
-        session.add_all((fandom, preserved_unit, changed_unit, phrase, image))
+        replaced_image = ImageConversion(
+            setting_id=setting.id,
+            phrase="Eevee",
+            separation=75,
+            explanation="Evolution Pokemon",
+            mutations=False,
+            images=base64.b64encode(b"old-eevee").decode("ascii"),
+        )
+        session.add_all((fandom, preserved_unit, changed_unit, phrase, image, replaced_image))
         session.commit()
 
         setting_id = setting.id
@@ -88,6 +146,11 @@ def test_update_setting_preserves_unchanged_rows(database, app_settings):
             "image": image.id,
         }
         changed_unit_id = changed_unit.id
+        replaced_image_id = replaced_image.id
+        replacement_data = b"new-eevee-image"
+        replacement_data_2 = b"another-eevee"
+        replacement_upload = TrackingUploadFile(replacement_data, "eevee.png")
+        replacement_upload_2 = TrackingUploadFile(replacement_data_2, "eevee-2.png")
 
         form = FormData(
             [
@@ -118,11 +181,18 @@ def test_update_setting_preserves_unchanged_rows(database, app_settings):
                 ("phrase_to", "new"),
                 ("phrase_direct", "True"),
                 ("phrase_mutations", "False"),
-                ("image_origin_name", "Pikachu"),
+                ("image_token", f"existing-{image.id}"),
                 ("image_phrase", "Pikachu"),
                 ("image_separation", "50"),
                 ("image_expl", "Electric mouse"),
                 ("image_mutations", "True"),
+                ("image_token", f"existing-{replaced_image.id}"),
+                ("image_phrase", "Eevee"),
+                ("image_separation", "75"),
+                ("image_expl", "Evolution Pokemon"),
+                ("image_mutations", "False"),
+                (f"image_files_existing-{replaced_image.id}", replacement_upload),
+                (f"image_files_existing-{replaced_image.id}", replacement_upload_2),
             ]
         )
 
@@ -135,10 +205,21 @@ def test_update_setting_preserves_unchanged_rows(database, app_settings):
             session.scalar(select(PhraseConversion.id).where(PhraseConversion.setting_id == setting_id))
             == preserved_ids["phrase"]
         )
-        assert (
-            session.scalar(select(ImageConversion.id).where(ImageConversion.setting_id == setting_id))
-            == preserved_ids["image"]
+        images = {
+            value.phrase: value
+            for value in session.scalars(select(ImageConversion).where(ImageConversion.setting_id == setting_id))
+        }
+        assert images["Pikachu"].id == preserved_ids["image"]
+        assert images["Pikachu"].images == base64.b64encode(b"existing").decode("ascii")
+        assert images["Eevee"].id != replaced_image_id
+        assert images["Eevee"].images == "*".join(
+            (
+                base64.b64encode(replacement_data).decode("ascii"),
+                base64.b64encode(replacement_data_2).decode("ascii"),
+            )
         )
+        assert replacement_upload.read_sizes == [len(replacement_data)]
+        assert replacement_upload_2.read_sizes == [len(replacement_data_2)]
 
         units = list(
             session.scalars(
