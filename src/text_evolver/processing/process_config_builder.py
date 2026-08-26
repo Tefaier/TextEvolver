@@ -158,6 +158,7 @@ def configure_process_unit(unit: object, configuration: ProcessingConfiguration)
 
 
 def _load_pokemons(unit: object, pokemons: tuple[PokemonRecord, ...], default_separation: int) -> None:
+    '''Loads pokemons data into ProcessUnit'''
     for pokemon in pokemons:
         unit.pokemons_list.setdefault(
             pokemon.name,

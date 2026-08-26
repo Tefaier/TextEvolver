@@ -17,7 +17,7 @@ from text_evolver.db.models import ProcessingJob
 from text_evolver.db.session import session_scope
 from text_evolver.processing.pokemon_cache import refresh_pokemon_cache
 from text_evolver.processing.processor import process_files
-from text_evolver.processing.settings_loader import ProcessingConfiguration, load_processing_configuration
+from text_evolver.processing.process_config_builder import ProcessingConfiguration, load_processing_configuration
 from text_evolver.services import job_paths
 
 LOGGER = logging.getLogger("text_evolver.worker")

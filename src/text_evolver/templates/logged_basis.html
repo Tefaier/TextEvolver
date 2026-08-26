@@ -22,7 +22,7 @@
                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         {% if files_situation[1]==0 %}
                         <button type="submit" onclick="Files_reset(this)" disabled class="text_usual centering {{ 'proc_process' if files_situation[0]!=0 else ('proc_empty' if files_situation[1]==0 else 'proc_finished') }}">
-                            {% if user.thread[0] is defined and user.thread[0].waits==True %} Waits {% endif %}{{ files_situation[1] }} / {{ files_situation[1] + files_situation[0] }}
+                            {% if user.waits %} Waits {% endif %}{{ files_situation[1] }} / {{ files_situation[1] + files_situation[0] }}
                         </button>
                         {% else %}
                         <button type="submit" onclick="Files_reset(this)" class="text_usual centering {{ 'proc_process' if files_situation[0]!=0 else ('proc_empty' if files_situation[1]==0 else 'proc_finished') }}">
@@ -31,7 +31,7 @@
                         {% endif %}
                     </form>
                 </li>
-                {% if user.thread[0] is defined and user.thread[0].waits==False and files_situation[0]!=0 %}
+                {% if job is not none and job.status=='running' and files_situation[0]!=0 %}
                 <li>
                     <form action="{{ url_for('terminate') }}" method="POST">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

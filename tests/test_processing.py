@@ -4,7 +4,7 @@ from docx import Document
 from ebooklib import epub
 
 from text_evolver.processing.processor import process_files
-from text_evolver.processing.settings_loader import ProcessingConfiguration
+from text_evolver.processing.process_config_builder import ProcessingConfiguration
 
 
 def configuration() -> ProcessingConfiguration:

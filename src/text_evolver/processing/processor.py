@@ -19,7 +19,7 @@ from text_evolver.processing.browser import HTML_IMAGE_STYLE
 from text_evolver.processing.images import get_image, get_pokemon_image
 
 #from tqdm import tqdm
-from text_evolver.processing.settings_loader import ProcessingConfiguration, configure_process_unit
+from text_evolver.processing.process_config_builder import ProcessingConfiguration, configure_process_unit
 from text_evolver.processing.text_analysis import (
     convert_utf8_symbols,
     find_in_clean,

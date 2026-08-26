@@ -56,16 +56,19 @@ def pokemon_cache_directory(temp_root: Path) -> Path:
 
 
 def _record_key(name: str, page_url: str) -> tuple[str, str]:
+    '''Makes it safe for find and comparison'''
     return name.casefold(), page_url
 
 
 def _safe_image_filename(entry: PokemonListEntry) -> str:
+    '''Constructs name for file as safe for filesystem'''
     slug = re.sub(r"[^a-z0-9]+", "-", entry.name.casefold()).strip("-") or "pokemon"
-    digest = hashlib.sha256(f"{entry.name}\0{entry.page_url}".encode()).hexdigest()[:12]
+    digest = hashlib.sha256(f"{entry.name}\0{entry.page_url}".encode()).hexdigest()[:6]
     return f"{slug[:60]}-{digest}.image"
 
 
 def _parse_pokemon_list(html: str) -> tuple[PokemonListEntry, ...]:
+    '''Returns list of located entries safe for further scraping'''
     soup = BeautifulSoup(html, "html.parser")
     body = soup.find("tbody")
     if body is None:
@@ -92,6 +95,7 @@ def _parse_pokemon_list(html: str) -> tuple[PokemonListEntry, ...]:
 
 
 def _detail_value(driver: DriverMethods, label: str) -> str:
+    '''Get value of height or weight from opened page if present'''
     try:
         value = driver.find_element(
             By.XPATH,
@@ -109,6 +113,7 @@ def _fetch_record(
     entry: PokemonListEntry,
     cache_directory: Path,
 ) -> PokemonRecord:
+    '''Gets and writes image and extra info if located '''
     driver.get(entry.page_url)
     try:
         tab = driver.find_element(By.XPATH, f"//div[@class='sv-tabs-tab-list']/a[text()='{entry.name}']")
@@ -147,6 +152,7 @@ def _fetch_record(
 
 
 def _read_records(cache_directory: Path) -> tuple[PokemonRecord, ...]:
+    '''Reads existing info from csv with filters on data being present, valid, and secure (path)'''
     csv_path = cache_directory / POKEMON_CSV_NAME
     if not csv_path.is_file():
         return ()
@@ -188,6 +194,7 @@ def load_pokemon_cache(temp_root: Path) -> tuple[PokemonRecord, ...]:
 
 
 def _write_records(cache_directory: Path, records: tuple[PokemonRecord, ...]) -> None:
+    '''Writes records to csv fully replacing what was there previously'''
     csv_path = cache_directory / POKEMON_CSV_NAME
     temporary_path = csv_path.with_suffix(".csv.tmp")
     cache_directory.mkdir(parents=True, exist_ok=True)
@@ -210,12 +217,14 @@ def _write_records(cache_directory: Path, records: tuple[PokemonRecord, ...]) ->
 
 
 def refresh_pokemon_cache(temp_root: Path) -> PokemonCacheRefresh:
+    '''Refreshes pokemon info in temp directory - loads pages only for diff'''
     cache_directory = pokemon_cache_directory(temp_root)
     cache_directory.mkdir(parents=True, exist_ok=True)
     existing = {_record_key(value.name, value.page_url): value for value in _read_records(cache_directory)}
     with browser_session() as driver:
         driver.get(POKEMON_BASE_URL + POKEMON_LIST_PATH)
         entries = _parse_pokemon_list(driver.page_source)
+        # from existing records with possible name change if just by case
         records = {
             _record_key(entry.name, entry.page_url): replace(
                 existing[_record_key(entry.name, entry.page_url)],
@@ -240,6 +249,5 @@ def refresh_pokemon_cache(temp_root: Path) -> PokemonCacheRefresh:
                     LOGGER.exception("Unable to cache Pokémon %s", entry.name)
                     continue
                 downloaded += 1
-                _write_records(cache_directory, tuple(records.values()))
     _write_records(cache_directory, tuple(records.values()))
     return PokemonCacheRefresh(len(entries), retained, downloaded, failed)

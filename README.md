@@ -141,6 +141,5 @@ in deterministic tests.
 
 to explore:
 - services
-- pokemon_cache
 - text_analysis
 - processor

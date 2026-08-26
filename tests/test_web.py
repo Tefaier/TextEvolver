@@ -45,10 +45,17 @@ def test_create_setting_and_enqueue_upload(registered_client: TestClient, databa
         files={"Process_files": ("book.html", b"<html><body><p>old</p></body></html>", "text/html")},
     )
     assert response.status_code == 200
+    assert "Waits" in response.text
+    assert 'value="Terminate"' not in response.text
     with Session(database) as session:
         job = session.scalar(select(ProcessingJob))
         assert job is not None
         assert job.status == "queued"
+        job.status = "running"
+        session.commit()
+
+    response = registered_client.get("/my_settings")
+    assert 'value="Terminate"' in response.text
 
 
 def test_private_setting_requires_owner(client: TestClient, database):
@@ -56,4 +63,3 @@ def test_private_setting_requires_owner(client: TestClient, database):
     response = client.get("/setting/999", follow_redirects=False)
     assert response.status_code == 303
     assert response.headers["location"].endswith("/login")
-

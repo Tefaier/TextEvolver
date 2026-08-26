@@ -4,10 +4,9 @@ import base64
 import datetime as dt
 from dataclasses import dataclass, field
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from starlette.datastructures import UploadFile
 
@@ -35,6 +34,7 @@ class ValidationError(ValueError):
 
 @dataclass
 class SettingData:
+    '''Representation of settings for frontend'''
     id: int
     owner_id: int
     name: str
@@ -49,22 +49,15 @@ class SettingData:
     image_convs: list[ImageConversion] = field(default_factory=list)
     phrase_convs: list[PhraseConversion] = field(default_factory=list)
 
-    @property
-    def use_coma_sep(self) -> bool:  # compatibility with the existing template
-        return self.use_comma_separator
-
-    @property
-    def user(self) -> SimpleNamespace:
-        return SimpleNamespace(name=self.owner_name)
-
 
 @dataclass
 class UserView:
+    '''Representation of user for frontend'''
     id: int
     name: str
     set_limit: int
     settings: list[SettingData]
-    thread: list[SimpleNamespace]
+    waits: bool
 
 
 def parse_bool(value: Any, field_name: str) -> bool:
@@ -136,10 +129,8 @@ def latest_job(session: Session, user_id: int) -> ProcessingJob | None:
 
 def user_view(session: Session, user: UserAccount) -> UserView:
     job = latest_job(session, user.id)
-    thread = []
-    if job is not None and job.status in ACTIVE_JOB_STATUSES:
-        thread = [SimpleNamespace(waits=job.status == "queued")]
-    return UserView(user.id, user.username, user.setting_limit, list_user_settings(session, user.id), thread)
+    waits = job is not None and job.status == "queued"
+    return UserView(user.id, user.username, user.setting_limit, list_user_settings(session, user.id), waits)
 
 
 def create_default_setting(session: Session, user_id: int) -> Setting:
@@ -247,10 +238,48 @@ def _values(form: Any, key: str) -> list[Any]:
 
 
 def _aligned(form: Any, keys: list[str]) -> list[list[Any]]:
+    """Extract repeated values and require the same number of values for every key."""
     values = [_values(form, key) for key in keys]
     if len({len(value) for value in values}) > 1:
         raise ValidationError(f"Mismatched repeated fields: {', '.join(keys)}")
     return values
+
+
+@dataclass(frozen=True)
+class RowChanges:
+    preserved: tuple[Any, ...]
+    removed: tuple[Any, ...]
+    added: tuple[dict[str, Any], ...]
+
+
+def _calculate_row_changes(
+    existing: list[Any], submitted: list[dict[str, Any]], fields: tuple[str, ...]
+) -> RowChanges:
+    """Compare complete row values without attempting to pair edits with existing rows."""
+    unmatched = list(existing)
+    preserved: list[Any] = []
+    added: list[dict[str, Any]] = []
+    for values in submitted:
+        submitted_key = tuple(values[field] for field in fields)
+        match_index = next(
+            (
+                index
+                for index, row in enumerate(unmatched)
+                if tuple(getattr(row, field) for field in fields) == submitted_key
+            ),
+            None,
+        )
+        if match_index is None:
+            added.append(values)
+        else:
+            preserved.append(unmatched.pop(match_index))
+    return RowChanges(tuple(preserved), tuple(unmatched), tuple(added))
+
+
+def _apply_relation_changes(session: Session, setting_id: int, model: type[Any], changes: RowChanges) -> None:
+    for row in changes.removed:
+        session.delete(row)
+    session.add_all(model(setting_id=setting_id, **values) for values in changes.added)
 
 
 async def update_setting_from_form(
@@ -270,58 +299,73 @@ async def update_setting_from_form(
     setting.use_comma_separator = parse_bool(form.get("set_coma_sep"), "set_coma_sep")
     setting.expect_feet = parse_bool(form.get("set_expect_feet"), "set_expect_feet")
 
-    old_images = {
-        value.phrase: value.images
-        for value in session.scalars(select(ImageConversion).where(ImageConversion.setting_id == setting_id))
-    }
-    for model in (Fandom, UnitConversion, PhraseConversion, ImageConversion):
-        session.execute(delete(model).where(model.setting_id == setting_id))
+    existing_fandoms = list(
+        session.scalars(select(Fandom).where(Fandom.setting_id == setting_id).order_by(Fandom.id))
+    )
+    existing_units = list(
+        session.scalars(
+            select(UnitConversion).where(UnitConversion.setting_id == setting_id).order_by(UnitConversion.id)
+        )
+    )
+    existing_phrases = list(
+        session.scalars(
+            select(PhraseConversion).where(PhraseConversion.setting_id == setting_id).order_by(PhraseConversion.id)
+        )
+    )
+    existing_images = list(
+        session.scalars(
+            select(ImageConversion).where(ImageConversion.setting_id == setting_id).order_by(ImageConversion.id)
+        )
+    )
+    old_images: dict[str, list[str]] = {}
+    for value in existing_images:
+        old_images.setdefault(value.phrase, []).append(value.images)
 
     fandom, active, separation, value_1, value_2 = _aligned(
         form, ["fandom", "fandom_active", "fandom_separation", "fandom_value_1", "fandom_value_2"]
     )
+    submitted_fandoms: list[dict[str, Any]] = []
     for index, fandom_name in enumerate(fandom):
-        session.add(
-            Fandom(
-                setting_id=setting_id,
-                name=str(fandom_name),
-                active=parse_bool(active[index], "fandom_active"),
-                separation=max(1, int(separation[index])),
-                support_value_1=parse_bool(value_1[index], "fandom_value_1"),
-                support_value_2=parse_bool(value_2[index], "fandom_value_2"),
-            )
+        submitted_fandoms.append(
+            {
+                "name": str(fandom_name),
+                "active": parse_bool(active[index], "fandom_active"),
+                "separation": max(1, int(separation[index])),
+                "support_value_1": parse_bool(value_1[index], "fandom_value_1"),
+                "support_value_2": parse_bool(value_2[index], "fandom_value_2"),
+            }
         )
 
     unit_from, unit_to, conversion, can_be_word = _aligned(
         form, ["unit_from", "unit_to", "unit_convert", "unit_can"]
     )
+    submitted_units: list[dict[str, Any]] = []
     for index, phrase_from in enumerate(unit_from):
         phrase_from = str(phrase_from).strip()
         if phrase_from:
-            session.add(
-                UnitConversion(
-                    setting_id=setting_id,
-                    phrase_from=phrase_from,
-                    phrase_to=str(unit_to[index]),
-                    conversion=float(conversion[index]),
-                    can_be_word=parse_bool(can_be_word[index], "unit_can"),
-                )
+            submitted_units.append(
+                {
+                    "phrase_from": phrase_from,
+                    "phrase_to": str(unit_to[index]),
+                    "conversion": float(conversion[index]),
+                    "can_be_word": parse_bool(can_be_word[index], "unit_can"),
+                }
             )
 
     phrase_from, phrase_to, direct, mutations = _aligned(
         form, ["phrase_from", "phrase_to", "phrase_direct", "phrase_mutations"]
     )
+    submitted_phrases: list[dict[str, Any]] = []
     for index, source in enumerate(phrase_from):
         source = str(source).strip()
         if source:
-            session.add(
-                PhraseConversion(
-                    setting_id=setting_id,
-                    phrase_from=source,
-                    phrase_to=str(phrase_to[index]),
-                    direct=parse_bool(direct[index], "phrase_direct"),
-                    mutations=parse_bool(mutations[index], "phrase_mutations"),
-                )
+            submitted_phrases.append(
+                {
+                    "phrase_from": source,
+                    "phrase_to": str(phrase_to[index]),
+                    "direct": parse_bool(direct[index], "phrase_direct"),
+                    "mutations": parse_bool(mutations[index], "phrase_mutations"),
+                }
             )
 
     origins, phrases, separations, explanations, image_mutations = _aligned(
@@ -330,11 +374,13 @@ async def update_setting_from_form(
     uploads = [value for value in _values(form, "image_files") if isinstance(value, UploadFile) and value.filename]
     upload_index = 0
     total_image_bytes = 0
+    submitted_images: list[dict[str, Any]] = []
     for index, phrase in enumerate(phrases):
         phrase = str(phrase).strip()
         if not phrase:
             continue
-        images = old_images.get(str(origins[index]), "")
+        matching_images = old_images.get(str(origins[index]), [])
+        images = matching_images.pop(0) if matching_images else ""
         if upload_index < len(uploads):
             data = await uploads[upload_index].read()
             upload_index += 1
@@ -342,18 +388,54 @@ async def update_setting_from_form(
             images = base64.b64encode(data).decode("ascii")
         if not images:
             raise ValidationError(f"Image conversion '{phrase}' requires an image")
-        session.add(
-            ImageConversion(
-                setting_id=setting_id,
-                phrase=phrase,
-                separation=max(1, int(separations[index])),
-                explanation=str(explanations[index]),
-                mutations=parse_bool(image_mutations[index], "image_mutations"),
-                images=images,
-            )
+        submitted_images.append(
+            {
+                "phrase": phrase,
+                "separation": max(1, int(separations[index])),
+                "explanation": str(explanations[index]),
+                "mutations": parse_bool(image_mutations[index], "image_mutations"),
+                "images": images,
+            }
         )
     if total_image_bytes > settings.setting_limit_bytes:
         raise ValidationError("Images exceed the configured setting size limit")
+
+    row_changes = (
+        (
+            Fandom,
+            _calculate_row_changes(
+                existing_fandoms,
+                submitted_fandoms,
+                ("name", "active", "separation", "support_value_1", "support_value_2"),
+            ),
+        ),
+        (
+            UnitConversion,
+            _calculate_row_changes(
+                existing_units,
+                submitted_units,
+                ("phrase_from", "phrase_to", "conversion", "can_be_word"),
+            ),
+        ),
+        (
+            PhraseConversion,
+            _calculate_row_changes(
+                existing_phrases,
+                submitted_phrases,
+                ("phrase_from", "phrase_to", "direct", "mutations"),
+            ),
+        ),
+        (
+            ImageConversion,
+            _calculate_row_changes(
+                existing_images,
+                submitted_images,
+                ("phrase", "separation", "explanation", "mutations", "images"),
+            ),
+        ),
+    )
+    for model, changes in row_changes:
+        _apply_relation_changes(session, setting_id, model, changes)
     session.flush()
 
 
@@ -400,7 +482,7 @@ async def create_job(
             ProcessingJob.status.in_(ACTIVE_JOB_STATUSES),
         )
     )
-    ready = session.scalar(
+    completed = session.scalar(
         select(ProcessingJob).where(
             ProcessingJob.user_id == user_id,
             ProcessingJob.status == "completed",
@@ -408,7 +490,7 @@ async def create_job(
     )
     if active is not None:
         raise ValidationError("There are still files being processed")
-    if ready is not None:
+    if completed is not None:
         raise ValidationError("Download completed files before starting another job")
     valid = [
         upload
