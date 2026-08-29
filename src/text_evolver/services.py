@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 from starlette.datastructures import UploadFile
 
@@ -312,6 +312,8 @@ def _encoded_images_size(images: str) -> int:
 async def _read_upload_with_limit(upload: UploadFile, available_bytes: int) -> bytes:
     """Read a known-size upload in bounded chunks without crossing the available byte budget."""
     expected_size = _upload_size(upload)
+    if expected_size > available_bytes:
+        raise ValidationError("Images exceed the configured setting size limit")
     await upload.seek(0)
     output = bytearray()
     while len(output) < expected_size:
@@ -537,7 +539,25 @@ def job_file_counts(settings: AppSettings, job: ProcessingJob | None) -> list[in
     return [pending, completed]
 
 
+def _acquire_create_job_lock(session: Session, user_id: int) -> None:
+    """Serialize job creation for one user until the surrounding transaction finishes."""
+    if session.get_bind().dialect.name == "postgresql":
+        session.execute(text("SELECT pg_advisory_xact_lock(:user_id)"), {"user_id": user_id})
+
+
 async def create_job(
+    session: Session,
+    app_settings: AppSettings,
+    user_id: int,
+    setting_id: int,
+    uploads: list[UploadFile],
+) -> ProcessingJob:
+    with session.begin_nested():
+        _acquire_create_job_lock(session, user_id)
+        return await _create_job_in_transaction(session, app_settings, user_id, setting_id, uploads)
+
+
+async def _create_job_in_transaction(
     session: Session,
     app_settings: AppSettings,
     user_id: int,

@@ -35,6 +35,8 @@ docker compose up --build
   application behavior or manual fixes to it.
 - `src/text_evolver/processing/` contains the format-specific rewriting and
   headless image/Selenium integrations.
+- `src/text_evolver/processing/documents/` owns stateful DOCX, EPUB, FB2, and
+  HTML traversal, native-part write-back, image insertion, and atomic saving.
 - `src/text_evolver/worker.py` runs a configurable thread pool; each slot
   transactionally claims a queued job and supervises its own processing child.
 - `migrations/sql/{postgresql,sqlite}/` contains matching Flyway migrations.
@@ -105,6 +107,12 @@ Text matching operates on a punctuation-cleaned copy and splices replacements
 back into original words to preserve punctuation and capitalization. Preserve
 the behavior of `text_cleaner`, `find_in_clean`, `text2int`, and
 `replace_iteration` when refactoring.
+
+`ProcessUnit` owns transformation rules only. Document adapters retain the
+last native text part and containing block; replacements remain local to a
+DOCX run or markup text node, while empty-block and image checks run once per
+paragraph/tag. Create a new `ProcessUnit` and adapter for every input document
+so counters and image-separation state do not leak between files.
 
 Image captioning uses Pillow and must remain headless. Selenium is used only by
 the worker-start Pokémon cache refresh. Driver construction goes through

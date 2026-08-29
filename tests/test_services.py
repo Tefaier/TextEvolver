@@ -19,6 +19,7 @@ from text_evolver.db.models import (
 from text_evolver.services import (
     ImageSubmission,
     ValidationError,
+    _acquire_create_job_lock,
     _calculate_row_changes,
     _materialize_image_submissions,
     _read_upload_with_limit,
@@ -56,7 +57,7 @@ def test_oversized_upload_is_rejected_before_content_is_read():
     upload = TrackingUploadFile(b"123456", "large.png")
 
     with pytest.raises(ValidationError, match="size limit"):
-        asyncio.run(_read_upload_with_limit(upload, expected_size=6, available_bytes=5))
+        asyncio.run(_read_upload_with_limit(upload, available_bytes=5))
 
     assert upload.read_sizes == []
 
@@ -65,7 +66,7 @@ def test_empty_upload_is_rejected_before_content_is_read():
     upload = TrackingUploadFile(b"", "empty.png")
 
     with pytest.raises(ValidationError, match="is empty"):
-        asyncio.run(_read_upload_with_limit(upload, expected_size=0, available_bytes=5))
+        asyncio.run(_read_upload_with_limit(upload, available_bytes=5))
 
     assert upload.read_sizes == []
 
@@ -80,6 +81,33 @@ def test_combined_upload_size_is_checked_before_any_content_is_read():
 
     assert first.read_sizes == []
     assert second.read_sizes == []
+
+
+def test_create_job_uses_postgresql_transaction_lock_for_user():
+    executed = []
+    session = SimpleNamespace(
+        get_bind=lambda: SimpleNamespace(dialect=SimpleNamespace(name="postgresql")),
+        execute=lambda statement, parameters: executed.append((statement, parameters)),
+    )
+
+    _acquire_create_job_lock(session, user_id=42)
+
+    assert len(executed) == 1
+    statement, parameters = executed[0]
+    assert str(statement) == "SELECT pg_advisory_xact_lock(:user_id)"
+    assert parameters == {"user_id": 42}
+
+
+def test_create_job_lock_is_skipped_for_sqlite():
+    executed = []
+    session = SimpleNamespace(
+        get_bind=lambda: SimpleNamespace(dialect=SimpleNamespace(name="sqlite")),
+        execute=lambda statement, parameters: executed.append((statement, parameters)),
+    )
+
+    _acquire_create_job_lock(session, user_id=42)
+
+    assert executed == []
 
 
 def test_update_setting_preserves_unchanged_rows(database, app_settings):

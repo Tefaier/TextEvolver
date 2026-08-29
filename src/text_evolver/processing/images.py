@@ -120,13 +120,3 @@ def get_pokemon_image(
         return get_image(source, key, key, caption)
     except Exception:
         return None
-
-
-def get_image_binary(path: str | Path) -> str | None:
-    try:
-        with Image.open(Path(path)) as image:
-            output = BytesIO()
-            image.save(output, format=image.format)
-        return convert_binary(output.getvalue(), "string")
-    except Exception:
-        return None

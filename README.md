@@ -138,8 +138,3 @@ in deterministic tests.
 | `WORKER_POLL_SECONDS` | Queue polling interval |
 | `WORKER_CONCURRENCY` | Maximum jobs processed concurrently by the worker (1-64) |
 | `WORKER_MIN_FREE_MEMORY_BYTES` | Memory threshold before claiming jobs |
-
-to explore:
-- services
-- text_analysis
-- processor
