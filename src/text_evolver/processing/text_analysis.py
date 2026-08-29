@@ -85,28 +85,50 @@ def redistribute_transformed_text(original_parts: list[str], transformed_text: s
     return ["".join(values) for values in redistributed]
 
 
-def replace_iteration(replace_map: list, words: list):
-    current_word = len(words) - 1
-    right_part = ''
-    left_part = words[current_word]
-    index = len(replace_map) - 1
-    while index >= 0:
-        borders = re.split(replace_map[index][0], left_part, flags=re.IGNORECASE)
-        if len(borders) == 1:  # not found
-            words[current_word] = left_part + right_part
-            current_word -= 1
-            if current_word < 0:
-                raise Exception
-            right_part = ''
-            left_part = words[current_word]
-        else:  # found
-            right_part = replace_map[index][1] + borders[-1] + right_part
-            left_part = left_part[:len(left_part) - len(replace_map[index][0]) - len(borders[-1])]
-            index -= 1
+def _find_last_literal_match(value: str, text: str) -> re.Match[str] | None:
+    if not value:
+        raise ValueError("Replacement source cannot be empty")
+
+    last_match = None
+    for match in re.finditer(re.escape(value), text, flags=re.IGNORECASE):
+        last_match = match
+    return last_match
+
+
+def replace_iteration(replace_map: list[list[str]], words: list[str]) -> list[str]:
+    """
+    Apply cleaned-word replacements while retaining native punctuation.
+    replace_map: replacement rules from find_in_clean
+    words: words from source text (not cleaned, symbols must be preserved)
+    """
+    if not replace_map:
+        return words
+    if not words:
+        raise ValueError("Cannot apply replacements to an empty word list")
+
+    word_index = len(words) - 1
+    remaining_word = words[word_index]
+    transformed_suffix = ""
+
+    for source, replacement in reversed(replace_map):
+        match = _find_last_literal_match(source, remaining_word)
+        while match is None:
+            words[word_index] = remaining_word + transformed_suffix
+            word_index -= 1
+            if word_index < 0:
+                raise ValueError(f"Replacement source {source!r} was not found in the original words")
+            remaining_word = words[word_index]
+            transformed_suffix = ""
+            match = _find_last_literal_match(source, remaining_word)
+
+        transformed_suffix = replacement + remaining_word[match.end() :] + transformed_suffix
+        remaining_word = remaining_word[: match.start()]
+
+    words[word_index] = remaining_word + transformed_suffix
     return words
 
 
-def text2int(textnum, numwords={}, interimwords={}):
+def _text2int(textnum, numwords={}, interimwords={}):
     units = [
         "zero", "one", "two", "three", "four", "five", "six", "seven", "eight",
         "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen",
@@ -195,7 +217,7 @@ def text2int(textnum, numwords={}, interimwords={}):
     return numbers_res
 
 
-def text_modifier(start_location: int, words_num: int, replace_map: list, replace_rules: dict):
+def _text_modifier(start_location: int, words_num: int, replace_map: list, replace_rules: dict):
     replace_map_copy = copy.deepcopy(replace_map)
     replacer = replace_rules["replace_with"].split(' ')
     replacer = ['' if i >= len(replacer) else (' '.join(replacer[i:]) if (i == words_num - 1) else replacer[i]) for
@@ -208,7 +230,7 @@ def text_modifier(start_location: int, words_num: int, replace_map: list, replac
         replace_map_copy[index][1] = replacer[index - start_location]
     if replace_rules["units"] != None:
         digit_check_start = (start_location - digit_len_before) if (start_location - digit_len_before >= 0) else 0
-        digit_version = text2int(" ".join([x[1] for x in replace_map_copy[digit_check_start:start_location]]))
+        digit_version = _text2int(" ".join([x[1] for x in replace_map_copy[digit_check_start:start_location]]))
         for i in range(digit_check_start, start_location):
             replace_map_copy[i][1] = digit_version[i - digit_check_start]
         digit_found = False
@@ -257,9 +279,9 @@ def find_in_clean(clean_words: list, look_for_words: list, to_find: str, mutatio
                     if feet_case:
                         feet_ignore = replace_rules.copy()
                         feet_ignore.update({"unit": None})
-                        results["replace_map"] = text_modifier(start_location, words_num, results["replace_map"], feet_ignore) or results["replace_map"]
+                        results["replace_map"] = _text_modifier(start_location, words_num, results["replace_map"], feet_ignore) or results["replace_map"]
                     else:
-                        results["replace_map"] = text_modifier(start_location, words_num, results["replace_map"], replace_rules) or results["replace_map"]
+                        results["replace_map"] = _text_modifier(start_location, words_num, results["replace_map"], replace_rules) or results["replace_map"]
             feet_case = False
         i += 1
     return results

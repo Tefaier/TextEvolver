@@ -4,6 +4,7 @@ from text_evolver.processing.text_analysis import (
     convert_utf8_symbols,
     is_feet,
     redistribute_transformed_text,
+    replace_iteration,
     string_empty,
     text2int,
     text_cleaner,
@@ -42,6 +43,23 @@ def test_text_cleaner_preserves_apostrophes_used_by_other_matchers():
     source = "Height 5'11 and cat’s paws"
 
     assert text_cleaner(source, {"coma in digits": False}) == source
+
+
+def test_replace_iteration_preserves_punctuation_between_cleaned_words():
+    replace_map = [["An", "An"], ["old", "brand"], ["road", "new path"]]
+
+    assert replace_iteration(replace_map, ["An", "old-road."]) == ["An", "brand-new path."]
+
+
+def test_replace_iteration_treats_sources_as_literal_text():
+    replace_map = [["Value", "Value"], ["1.5", "2.5"]]
+
+    assert replace_iteration(replace_map, ["Value", "1.5."]) == ["Value", "2.5."]
+
+
+def test_replace_iteration_reports_unmatched_source():
+    with pytest.raises(ValueError, match="'missing' was not found"):
+        replace_iteration([["missing", "replacement"]], ["present"])
 
 
 def test_spelled_numbers_and_feet_are_recognized():

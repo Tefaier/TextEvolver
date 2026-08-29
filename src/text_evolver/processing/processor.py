@@ -119,7 +119,7 @@ class ProcessUnit:
                     words = replace_iteration(results["replace_map"], words.copy())
                     text = " ".join(words)
                     clean_text = text_cleaner(text, self.settings).split(" ")
-                except Exception:
+                except ValueError:
                     pass
         for phrase, item in self.word_conversions.items():
             results = find_in_clean(
@@ -139,7 +139,7 @@ class ProcessUnit:
                     words = replace_iteration(results["replace_map"], words.copy())
                     text = " ".join(words)
                     clean_text = text_cleaner(text, self.settings).split(" ")
-                except Exception:
+                except ValueError:
                     pass
         return " ".join(words)
 

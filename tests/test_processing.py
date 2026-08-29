@@ -167,6 +167,27 @@ def test_direct_replacement_crosses_markup_parts(tmp_path: Path):
     )
 
 
+def test_non_direct_replacement_updates_whole_phrase(tmp_path: Path):
+    origin, output, source = run_one(tmp_path, "phrase.html")
+    source.write_text("<html><body><p>An old-road.</p></body></html>", encoding="utf-8")
+    phrase_configuration = configuration(
+        phrases=(
+            {
+                "phrase_from": "old road",
+                "phrase_to": "brand new path",
+                "direct": False,
+                "mutations": False,
+            },
+        )
+    )
+
+    process_files(phrase_configuration, origin, output)
+
+    assert (output / source.name).read_text(encoding="utf-8") == (
+        "<html><body><p>An brand-new path.</p></body></html>"
+    )
+
+
 def test_docx_table_paragraph_processing(tmp_path: Path):
     origin, output, source = run_one(tmp_path, "table.docx")
     document = Document()
