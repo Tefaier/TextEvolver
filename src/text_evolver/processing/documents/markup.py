@@ -62,6 +62,7 @@ class MarkupCursor:
                 text=str(part) if part is not None else "",
                 block_text=block.text,
                 starts_block=part_index == 0,
+                ends_block=part_index == len(block.parts) - 1,
             )
         self.clear_last_part()
         return None
@@ -77,6 +78,23 @@ class MarkupCursor:
         replacement = NavigableString(text)
         self._last_part.replace_with(replacement)
         self._last_part = replacement
+
+    def overwrite_last_block_parts(self, texts: list[str]) -> None:
+        block = self.last_block
+        if self._last_block is None or len(texts) != len(self._last_block.parts):
+            raise ValueError("Replacement part count does not match the current document block")
+        replacements: list[NavigableString | None] = []
+        for part, text in zip(self._last_block.parts, texts, strict=True):
+            if part is None:
+                replacement = NavigableString(text) if text else None
+                if replacement is not None:
+                    block.append(replacement)
+            else:
+                replacement = NavigableString(text)
+                part.replace_with(replacement)
+            replacements.append(replacement)
+        self._last_block.parts = replacements
+        self._last_part = replacements[-1]
 
     def remove_last_block(self) -> None:
         block = self.last_block

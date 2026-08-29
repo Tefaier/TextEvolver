@@ -1,10 +1,11 @@
 from pathlib import Path
 
-from bs4 import BeautifulSoup
+import ebooklib
 from docx import Document
 from ebooklib import epub
 
 from text_evolver.processing import processor
+from text_evolver.processing.documents import create_document_adapter
 from text_evolver.processing.process_config_builder import ProcessingConfiguration
 from text_evolver.processing.processor import process_files
 
@@ -44,9 +45,9 @@ def test_html_processing(tmp_path: Path):
 
     assert process_files(configuration(), origin, output) == 1
 
-    soup = BeautifulSoup((output / source.name).read_bytes(), "html.parser")
-    assert "new road" in soup.get_text()
-    assert soup.strong is not None and soup.strong.get_text() == "new"
+    assert (output / source.name).read_text(encoding="utf-8") == (
+        "<html><body><p>An <strong>new</strong> road.</p></body></html>"
+    )
     assert not source.exists()
 
 
@@ -59,9 +60,10 @@ def test_fb2_processing(tmp_path: Path):
 
     process_files(configuration(), origin, output)
 
-    soup = BeautifulSoup((output / source.name).read_bytes(), "xml")
-    assert "new road" in soup.get_text()
-    assert soup.emphasis is not None and soup.emphasis.get_text() == "new"
+    assert (output / source.name).read_text(encoding="utf-8") == (
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        "<FictionBook><body><section><p>An <emphasis>new</emphasis> road.</p></section></body></FictionBook>"
+    )
 
 
 def test_docx_processing(tmp_path: Path):
@@ -82,6 +84,33 @@ def test_docx_processing(tmp_path: Path):
     assert processed_paragraph.runs[1].bold is True
 
 
+def test_docx_replacement_crosses_runs(tmp_path: Path):
+    origin, output, source = run_one(tmp_path, "split.docx")
+    document = Document()
+    paragraph = document.add_paragraph()
+    first_run = paragraph.add_run("old")
+    first_run.bold = True
+    paragraph.add_run(" road")
+    document.save(source)
+    cross_part_configuration = configuration(
+        phrases=(
+            {
+                "phrase_from": "old road",
+                "phrase_to": "brand new path",
+                "direct": True,
+                "mutations": False,
+            },
+        )
+    )
+
+    process_files(cross_part_configuration, origin, output)
+
+    processed_paragraph = Document(output / source.name).paragraphs[0]
+    assert processed_paragraph.text == "brand new path"
+    assert [run.text for run in processed_paragraph.runs] == ["brand", " new path"]
+    assert processed_paragraph.runs[0].bold is True
+
+
 def test_epub_processing(tmp_path: Path):
     origin, output, source = run_one(tmp_path, "book.epub")
     book = epub.EpubBook()
@@ -100,23 +129,32 @@ def test_epub_processing(tmp_path: Path):
     process_files(configuration(), origin, output)
 
     processed = epub.read_epub(output / source.name)
-    contents = [item.get_content() for item in processed.get_items()]
-    rendered_text = " ".join(
-        " ".join(BeautifulSoup(content, "xml").get_text(" ").split()) for content in contents
+    chapter_content = next(
+        item.get_content()
+        for item in processed.get_items()
+        if item.get_type() == ebooklib.ITEM_DOCUMENT and item.file_name == "chapter.xhtml"
     )
-    assert "new road" in rendered_text
-    assert any(b"<strong>new</strong>" in content for content in contents)
+    assert chapter_content == (
+        b"<?xml version='1.0' encoding='utf-8'?>\n"
+        b"<!DOCTYPE html>\n"
+        b'<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" '
+        b'epub:prefix="z3998: http://www.daisy.org/z3998/2012/vocab/structure/#" lang="en" xml:lang="en">\n'
+        b"  <head/>\n"
+        b"  <body><p>An <strong>new</strong> road.</p>\n"
+        b"</body>\n"
+        b"</html>\n"
+    )
 
 
-def test_phrase_replacement_does_not_cross_markup_parts(tmp_path: Path):
+def test_direct_replacement_crosses_markup_parts(tmp_path: Path):
     origin, output, source = run_one(tmp_path, "split.html")
     source.write_text("<html><body><p><strong>old</strong> road</p></body></html>", encoding="utf-8")
     split_phrase_configuration = configuration(
         phrases=(
             {
                 "phrase_from": "old road",
-                "phrase_to": "new path",
-                "direct": False,
+                "phrase_to": "brand new path",
+                "direct": True,
                 "mutations": False,
             },
         )
@@ -124,9 +162,9 @@ def test_phrase_replacement_does_not_cross_markup_parts(tmp_path: Path):
 
     process_files(split_phrase_configuration, origin, output)
 
-    result = BeautifulSoup((output / source.name).read_bytes(), "html.parser").get_text()
-    assert "old road" in result
-    assert "new path" not in result
+    assert (output / source.name).read_text(encoding="utf-8") == (
+        "<html><body><p><strong>brand</strong> new path</p></body></html>"
+    )
 
 
 def test_docx_table_paragraph_processing(tmp_path: Path):
@@ -148,8 +186,7 @@ def test_clean_empty_removes_whole_markup_block(tmp_path: Path):
 
     process_files(configuration(clean_empty=True, phrases=()), origin, output)
 
-    soup = BeautifulSoup((output / source.name).read_bytes(), "html.parser")
-    assert [paragraph.get_text() for paragraph in soup.find_all("p")] == ["keep"]
+    assert (output / source.name).read_text(encoding="utf-8") == "<html><body><p>keep</p></body></html>"
 
 
 def test_block_level_checks_run_once_for_multiple_native_parts(monkeypatch, tmp_path: Path):
@@ -167,6 +204,29 @@ def test_block_level_checks_run_once_for_multiple_native_parts(monkeypatch, tmp_
     process_files(configuration(phrases=()), origin, output)
 
     assert calls == ["one two three"]
+
+
+def test_word_counter_ignores_empty_space_segments(tmp_path: Path):
+    origin, output, source = run_one(tmp_path, "spaces.html")
+    source.write_text("<html><body><p>one  two</p><p>   </p></body></html>", encoding="utf-8")
+    process_unit = processor.ProcessUnit(configuration(phrases=()))
+    document = create_document_adapter(source, output / source.name)
+    alteration_calls: list[str] = []
+    original_alteration = process_unit.text_alteration
+
+    def track_alteration(text: str) -> str:
+        alteration_calls.append(text)
+        return original_alteration(text)
+
+    process_unit.text_alteration = track_alteration
+
+    process_unit.process_document(document)
+
+    assert process_unit.word_counter == 2
+    assert alteration_calls == ["one  two"]
+    assert (output / source.name).read_text(encoding="utf-8") == (
+        "<html><body><p>one  two</p><p> </p></body></html>"
+    )
 
 
 def test_image_separation_state_resets_for_each_document(monkeypatch, tmp_path: Path):
@@ -194,6 +254,10 @@ def test_image_separation_state_resets_for_each_document(monkeypatch, tmp_path: 
 
     assert process_files(image_configuration, origin, output) == 2
 
+    expected = (
+        '<html><body><img src="data:image/jpeg;base64,aW1hZ2U=" '
+        'style="display: block; margin-left: auto; margin-right: auto; max-width: 99%;"/>'
+        "<p><strong>trigger</strong> trigger</p></body></html>"
+    )
     for filename in ("first.html", "second.html"):
-        soup = BeautifulSoup((output / filename).read_bytes(), "html.parser")
-        assert len(soup.find_all("img")) == 1
+        assert (output / filename).read_text(encoding="utf-8") == expected

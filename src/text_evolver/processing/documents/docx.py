@@ -58,6 +58,7 @@ class DocxDocumentAdapter(DocumentAdapter):
                 text=run.text if run is not None else "",
                 block_text=self._current_text,
                 starts_block=part_index == 0,
+                ends_block=part_index == len(self._current_parts) - 1,
             )
 
     def overwrite_last_part(self, text: str) -> None:
@@ -69,6 +70,21 @@ class DocxDocumentAdapter(DocumentAdapter):
                 self._last_run = self._last_paragraph.add_run(text)
             return
         self._last_run.text = text
+
+    def overwrite_last_block_parts(self, texts: list[str]) -> None:
+        self._require_last_part()
+        if self._last_paragraph is None or len(texts) != len(self._current_parts):
+            raise ValueError("Replacement part count does not match the current document block")
+        replacements: list[Run | None] = []
+        for run, text in zip(self._current_parts, texts, strict=True):
+            if run is None:
+                replacement = self._last_paragraph.add_run(text) if text else None
+            else:
+                run.text = text
+                replacement = run
+            replacements.append(replacement)
+        self._current_parts = replacements
+        self._last_run = replacements[-1]
 
     def remove_last_block(self) -> None:
         self._require_last_part()

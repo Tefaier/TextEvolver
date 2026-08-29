@@ -8,6 +8,7 @@ class DocumentPart:
     text: str
     block_text: str
     starts_block: bool
+    ends_block: bool
 
 
 class DocumentAdapter(ABC):
@@ -35,6 +36,10 @@ class DocumentAdapter(ABC):
     @abstractmethod
     def overwrite_last_part(self, text: str) -> None:
         """Replace the native text part returned by the last successful read."""
+
+    @abstractmethod
+    def overwrite_last_block_parts(self, texts: list[str]) -> None:
+        """Replace every native text part in the block containing the last read part."""
 
     @abstractmethod
     def remove_last_block(self) -> None:

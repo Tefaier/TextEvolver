@@ -6,10 +6,12 @@ from text_evolver.processing.documents import DocumentAdapter, create_document_a
 from text_evolver.processing.images import get_image, get_pokemon_image
 from text_evolver.processing.process_config_builder import ProcessingConfiguration, configure_process_unit
 from text_evolver.processing.text_analysis import (
+    redistribute_transformed_text,
     convert_utf8_symbols,
     find_in_clean,
     possible_mutations,
     replace_iteration,
+    string_empty,
     string_with_meaning,
     text_cleaner,
 )
@@ -90,8 +92,9 @@ class ProcessUnit:
             string = string.replace(source, replacement)
         return string
 
-    def text_alteration(self, words: list[str]) -> list[str]:
-        clean_text = text_cleaner(" ".join(words), self.settings).split(" ")
+    def text_alteration(self, text: str) -> str:
+        words = text.split(" ")
+        clean_text = text_cleaner(text, self.settings).split(" ")
 
         for phrase, item in self.units_list.items():
             results = find_in_clean(
@@ -109,7 +112,8 @@ class ProcessUnit:
             if results["found"]:
                 try:
                     words = replace_iteration(results["replace_map"], words.copy())
-                    clean_text = text_cleaner(" ".join(words), self.settings).split(" ")
+                    text = " ".join(words)
+                    clean_text = text_cleaner(text, self.settings).split(" ")
                 except Exception:
                     pass
         for phrase, item in self.word_conversions.items():
@@ -128,26 +132,29 @@ class ProcessUnit:
             if results["found"]:
                 try:
                     words = replace_iteration(results["replace_map"], words.copy())
-                    clean_text = text_cleaner(" ".join(words), self.settings).split(" ")
+                    text = " ".join(words)
+                    clean_text = text_cleaner(text, self.settings).split(" ")
                 except Exception:
                     pass
-        return words
+        return " ".join(words)
 
     def process_document(self, document: DocumentAdapter) -> Path:
+        block_parts: list[str] = []
         while (part := document.read_part()) is not None:
             if part.starts_block:
+                block_parts = []
                 if self.settings["clean empty"] and not string_with_meaning(part.block_text):
                     document.remove_last_block()
                     continue
                 self.images_locate(part.block_text, document)
-
-            text = self.direct_replace(part.text)
-            words = text.split(" ")
-            if words in [[""], ["\n"]]:
+            block_parts.append(part.text)
+            if not part.ends_block:
                 continue
-            words = self.text_alteration(words)
-            self.word_counter += len(words)
-            document.overwrite_last_part(" ".join(words))
+
+            text = self.direct_replace(part.block_text)
+            transformed_text = text if string_empty(text) else self.text_alteration(text)
+            self.word_counter += len(text_cleaner(transformed_text, self.settings).split())
+            document.overwrite_last_block_parts(redistribute_transformed_text(block_parts, transformed_text))
         return document.save()
 
 

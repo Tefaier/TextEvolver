@@ -25,6 +25,10 @@ class Fb2DocumentAdapter(DocumentAdapter):
         self._require_last_part()
         self._cursor.overwrite_last_part(text)
 
+    def overwrite_last_block_parts(self, texts: list[str]) -> None:
+        self._require_last_part()
+        self._cursor.overwrite_last_block_parts(texts)
+
     def remove_last_block(self) -> None:
         self._require_last_part()
         self._cursor.remove_last_block()

@@ -2,15 +2,66 @@ import copy
 import html
 import re
 import unicodedata
+from bisect import bisect_right
+from difflib import SequenceMatcher
 
 in_num_words = ["of", '', 'to', 'or', 'so']
 erase_symbols_def = [',', '?', ':', ';', '!', '[', ']', '(', ')', '-', '_', '"', '>', '<', '*']
 possible_mutations = ['s', "'", "'s", 'es', 'ов', 'ы', 'а', '’s']
 digit_len_before = 7
+MEANINGFULL_CHARACTER_PATTERN = re.compile(r"[^\W_]")
+EMPTY_STRING_PATTERN = re.compile(r"\s*")
 
 
 def string_with_meaning(text: str):
-    return re.search(r"[^\W_]", text) is not None
+    return MEANINGFULL_CHARACTER_PATTERN.search(text) is not None
+
+
+def string_empty(text: str) -> bool:
+    return EMPTY_STRING_PATTERN.fullmatch(text) is not None
+
+
+def redistribute_transformed_text(original_parts: list[str], transformed_text: str) -> list[str]:
+    """Map transformed block text back to native parts while retaining unchanged part ownership."""
+    if not original_parts:
+        raise ValueError("A document block must contain at least one native part")
+    original_text = "".join(original_parts)
+    if transformed_text == original_text:
+        return original_parts.copy()
+
+    boundaries = [0]
+    for value in original_parts:
+        boundaries.append(boundaries[-1] + len(value))
+    redistributed: list[list[str]] = [[] for _ in original_parts]
+
+    def part_index(offset: int) -> int:
+        return min(max(bisect_right(boundaries, offset) - 1, 0), len(original_parts) - 1)
+
+    for operation, original_start, original_end, transformed_start, transformed_end in SequenceMatcher(
+        None,
+        original_text,
+        transformed_text,
+        autojunk=False,
+    ).get_opcodes():
+        if operation == "equal":
+            original_offset = original_start
+            transformed_offset = transformed_start
+            while original_offset < original_end:
+                index = part_index(original_offset)
+                owned_end = min(original_end, boundaries[index + 1])
+                length = owned_end - original_offset
+                if length <= 0:
+                    index += 1
+                    if index >= len(original_parts):
+                        break
+                    owned_end = min(original_end, boundaries[index + 1])
+                    length = owned_end - original_offset
+                redistributed[index].append(transformed_text[transformed_offset : transformed_offset + length])
+                original_offset = owned_end
+                transformed_offset += length
+        elif operation in {"replace", "insert"}:
+            redistributed[part_index(original_start)].append(transformed_text[transformed_start:transformed_end])
+    return ["".join(values) for values in redistributed]
 
 
 def convert_utf8_symbols(text: str):

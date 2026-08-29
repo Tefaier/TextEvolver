@@ -109,10 +109,12 @@ the behavior of `text_cleaner`, `find_in_clean`, `text2int`, and
 `replace_iteration` when refactoring.
 
 `ProcessUnit` owns transformation rules only. Document adapters retain the
-last native text part and containing block; replacements remain local to a
-DOCX run or markup text node, while empty-block and image checks run once per
-paragraph/tag. Create a new `ProcessUnit` and adapter for every input document
-so counters and image-separation state do not leak between files.
+last native text part and containing block. The processor transforms combined
+block text so replacements can cross DOCX runs or markup text nodes, then maps
+the result back to native parts to retain inline formatting. Empty-block and
+image checks run once per paragraph/tag. Create a new `ProcessUnit` and adapter
+for every input document so counters and image-separation state do not leak
+between files.
 
 Image captioning uses Pillow and must remain headless. Selenium is used only by
 the worker-start Pokémon cache refresh. Driver construction goes through

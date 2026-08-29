@@ -28,6 +28,8 @@ def test_adapter_requires_a_last_read_part(tmp_path: Path):
     with pytest.raises(RuntimeError, match="Read a document part"):
         adapter.overwrite_last_part("replacement")
     with pytest.raises(RuntimeError, match="Read a document part"):
+        adapter.overwrite_last_block_parts(["replacement"])
+    with pytest.raises(RuntimeError, match="Read a document part"):
         adapter.remove_last_block()
     with pytest.raises(RuntimeError, match="Read a document part"):
         adapter.insert_image_before_last_block(jpeg_base64())
