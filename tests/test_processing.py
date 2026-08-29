@@ -261,3 +261,25 @@ def test_image_separation_state_resets_for_each_document(monkeypatch, tmp_path: 
     )
     for filename in ("first.html", "second.html"):
         assert (output / filename).read_text(encoding="utf-8") == expected
+
+
+def test_image_trigger_pattern_is_precompiled_and_escapes_phrases():
+    process_unit = processor.ProcessUnit(
+        configuration(
+            phrases=(),
+            images=(
+                {
+                    "phrase": "a+b",
+                    "separation": 1,
+                    "explanation": "",
+                    "mutations": False,
+                    "images": "aW1hZ2U=",
+                },
+            ),
+        )
+    )
+
+    pattern = process_unit.image_trigger_pattern
+    assert pattern is not None
+    assert pattern.findall("a+b ab aab") == [("a+b", "")]
+    assert process_unit.image_trigger_pattern is pattern

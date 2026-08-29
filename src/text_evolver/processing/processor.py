@@ -6,10 +6,10 @@ from text_evolver.processing.documents import DocumentAdapter, create_document_a
 from text_evolver.processing.images import get_image, get_pokemon_image
 from text_evolver.processing.process_config_builder import ProcessingConfiguration, configure_process_unit
 from text_evolver.processing.text_analysis import (
-    redistribute_transformed_text,
     convert_utf8_symbols,
     find_in_clean,
     possible_mutations,
+    redistribute_transformed_text,
     replace_iteration,
     string_empty,
     string_with_meaning,
@@ -26,6 +26,16 @@ def image_choser(obj: dict):  # if an official image is chosen return None, othe
     return obj["binary"][random_num - (0 if official_image is None else 1)]
 
 
+def _compile_image_trigger_pattern(triggers: dict[str, object]) -> re.Pattern[str] | None:
+    if not triggers:
+        return None
+    trigger_pattern = "|".join(
+        sorted((re.escape(trigger) for trigger in triggers), key=len, reverse=True)
+    )
+    mutation_pattern = "|".join(re.escape(mutation) for mutation in possible_mutations)
+    return re.compile(fr"\b(?i:({trigger_pattern}))({mutation_pattern})?\b")
+
+
 class ProcessUnit:
     def __init__(self, configuration: ProcessingConfiguration):
         self.settings: dict = {}
@@ -35,20 +45,18 @@ class ProcessUnit:
         self.direct_conversions: dict = {}
         self.extra_img_list: dict = {}
         self.word_counter = 0
-        self.mutations_string = "|".join(possible_mutations)
         configure_process_unit(self, configuration)
-        self.pokemons_navigation_map = [[name.lower(), name] for name in self.pokemons_list]
-        self.images_navigation_map = [[name.lower(), name] for name in self.extra_img_list]
+        self.pokemons_navigation_map = {name.casefold(): name for name in self.pokemons_list}
+        self.images_navigation_map = {name.casefold(): name for name in self.extra_img_list}
+        self.pokemon_trigger_pattern = _compile_image_trigger_pattern(self.pokemons_list)
+        self.image_trigger_pattern = _compile_image_trigger_pattern(self.extra_img_list)
 
     def images_locate(self, string: str, document: DocumentAdapter) -> None:
         clean_text = text_cleaner(string, self.settings)
-        if self.settings["pokemon"]:
-            results = re.findall(
-                fr"\b(?i:({'|'.join(self.pokemons_list.keys())}))({self.mutations_string})?\b",
-                clean_text,
-            )
+        if self.settings["pokemon"] and self.pokemon_trigger_pattern is not None:
+            results = self.pokemon_trigger_pattern.findall(clean_text)
             for result in results:
-                key = next(value[1] for value in self.pokemons_navigation_map if value[0] == result[0].lower())
+                key = self.pokemons_navigation_map[result[0].casefold()]
                 item = self.pokemons_list[key]
                 if item["last word"] is None or (
                     item["last word"] + item["separation"] < self.word_counter and item["separation"] != 1
@@ -65,13 +73,10 @@ class ProcessUnit:
                     if image_data is not None:
                         item["last word"] = self.word_counter
                         document.insert_image_before_last_block(image_data)
-        if self.extra_img_list:
-            results = re.findall(
-                fr"\b(?i:({'|'.join(self.extra_img_list.keys())}))({self.mutations_string})?\b",
-                clean_text,
-            )
+        if self.image_trigger_pattern is not None:
+            results = self.image_trigger_pattern.findall(clean_text)
             for result in results:
-                key = next(value[1] for value in self.images_navigation_map if value[0] == result[0].lower())
+                key = self.images_navigation_map[result[0].casefold()]
                 item = self.extra_img_list[key]
                 if (result[1] == "" or item["mutation"]) and (
                     item["last word"] is None

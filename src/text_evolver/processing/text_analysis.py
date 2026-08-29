@@ -6,11 +6,14 @@ from bisect import bisect_right
 from difflib import SequenceMatcher
 
 in_num_words = ["of", '', 'to', 'or', 'so']
-erase_symbols_def = [',', '?', ':', ';', '!', '[', ']', '(', ')', '-', '_', '"', '>', '<', '*']
 possible_mutations = ['s', "'", "'s", 'es', 'ов', 'ы', 'а', '’s']
 digit_len_before = 7
 MEANINGFULL_CHARACTER_PATTERN = re.compile(r"[^\W_]")
 EMPTY_STRING_PATTERN = re.compile(r"\s*")
+FEET_PATTERN = re.compile(r"\d+['’]\d+")
+ERASE_WITH_PERIOD_SEPARATOR_PATTERN = re.compile(r"[^\w.'’]|_|(?<!\d)\.|\.(?!\d)")
+ERASE_WITH_COMMA_SEPARATOR_PATTERN = re.compile(r"[^\w,'’]|_|(?<!\d),|,(?!\d)")
+MULTIPLE_SPACES_PATTERN = re.compile(r" {2,}")
 
 
 def string_with_meaning(text: str):
@@ -19,6 +22,24 @@ def string_with_meaning(text: str):
 
 def string_empty(text: str) -> bool:
     return EMPTY_STRING_PATTERN.fullmatch(text) is not None
+
+
+def is_float(string: str):
+    if string is None:
+        return False
+    try:
+        float(string)
+        return True
+    except ValueError:
+        return False
+
+
+def is_feet(string: str | None) -> bool:
+    return string is not None and FEET_PATTERN.fullmatch(string) is not None
+
+
+def convert_utf8_symbols(text: str):
+    return unicodedata.normalize("NFKC", html.unescape(text))
 
 
 def redistribute_transformed_text(original_parts: list[str], transformed_text: str) -> list[str]:
@@ -48,45 +69,20 @@ def redistribute_transformed_text(original_parts: list[str], transformed_text: s
             transformed_offset = transformed_start
             while original_offset < original_end:
                 index = part_index(original_offset)
-                owned_end = min(original_end, boundaries[index + 1])
-                length = owned_end - original_offset
+                current_piece_end = min(original_end, boundaries[index + 1])
+                length = current_piece_end - original_offset
                 if length <= 0:
                     index += 1
                     if index >= len(original_parts):
                         break
-                    owned_end = min(original_end, boundaries[index + 1])
-                    length = owned_end - original_offset
+                    current_piece_end = min(original_end, boundaries[index + 1])
+                    length = current_piece_end - original_offset
                 redistributed[index].append(transformed_text[transformed_offset : transformed_offset + length])
-                original_offset = owned_end
+                original_offset = current_piece_end
                 transformed_offset += length
         elif operation in {"replace", "insert"}:
             redistributed[part_index(original_start)].append(transformed_text[transformed_start:transformed_end])
     return ["".join(values) for values in redistributed]
-
-
-def convert_utf8_symbols(text: str):
-    return unicodedata.normalize("NFKC", html.unescape(text))
-
-
-def is_float(string: str):
-    if string is None:
-        return False
-    try:
-        float(string)
-        return True
-    except ValueError:
-        return False
-
-
-def is_feet(string: str):
-    if string is None:
-        return False
-    try:
-        parts1 = string.split("'")
-        parts2 = string.split("’")
-        return (len(parts1)==2 and parts1[0].isdigit() and parts1[1].isdigit()) or (len(parts2)==2 and parts2[0].isdigit() and parts2[1].isdigit())
-    except ValueError:
-        return False
 
 
 def replace_iteration(replace_map: list, words: list):
@@ -269,26 +265,11 @@ def find_in_clean(clean_words: list, look_for_words: list, to_find: str, mutatio
     return results
 
 
-def text_cleaner(string: str, settings: dict):
-    erase_symbols = erase_symbols_def.copy()
-    separator = '.'
-    if settings["coma in digits"]:
-        erase_symbols.remove(',')
-        erase_symbols.append('.')
-        separator = ','
-    new_string = string
-    for to_erase in erase_symbols:
-        new_string = new_string.replace(to_erase, ' ')
-    for i in range(len(new_string) - 1, -1, -1):
-        if new_string[i] == separator:
-            if i == 0 or i == len(new_string) - 1:
-                new_string = new_string[0:i] + new_string[i + 1:]
-            elif not (is_float(new_string[i + 1]) and is_float(new_string[i - 1])):
-                new_string = new_string[0:i] + ' ' + new_string[i + 1:]
-    while "  " in new_string:
-        new_string = new_string.replace('  ', ' ')
-    if (len(new_string) > 0 and new_string[0] == ' '):
-        new_string = new_string[1:]
-    if (len(new_string) > 0 and new_string[-1] == ' '):
-        new_string = new_string[:-1]
-    return new_string
+def text_cleaner(string: str, settings: dict) -> str:
+    erase_pattern = (
+        ERASE_WITH_COMMA_SEPARATOR_PATTERN
+        if settings["coma in digits"]
+        else ERASE_WITH_PERIOD_SEPARATOR_PATTERN
+    )
+    cleaned = erase_pattern.sub(" ", string)
+    return MULTIPLE_SPACES_PATTERN.sub(" ", cleaned).strip(" ")
