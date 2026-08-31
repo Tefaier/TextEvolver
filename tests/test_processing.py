@@ -8,21 +8,24 @@ from text_evolver.processing import processor
 from text_evolver.processing.documents import create_document_adapter
 from text_evolver.processing.process_config_builder import ProcessingConfiguration
 from text_evolver.processing.processor import process_files
+from text_evolver.processing.text_analysis import ReplaceRules
 
 
 def configuration(
     *,
     clean_empty: bool = False,
+    expect_feet: bool = False,
+    units: tuple[dict[str, object], ...] = (),
     phrases: tuple[dict[str, object], ...] | None = None,
     images: tuple[dict[str, object], ...] = (),
 ) -> ProcessingConfiguration:
     return ProcessingConfiguration(
         use_comma_separator=False,
-        expect_feet=False,
+        expect_feet=expect_feet,
         clean_empty=clean_empty,
         convert_to_utf=False,
         fandoms=(),
-        units=(),
+        units=units,
         phrases=(
             phrases
             if phrases is not None
@@ -186,6 +189,57 @@ def test_non_direct_replacement_updates_whole_phrase(tmp_path: Path):
     assert (output / source.name).read_text(encoding="utf-8") == (
         "<html><body><p>An brand-new path.</p></body></html>"
     )
+
+
+def test_conversion_rules_are_built_when_process_unit_is_configured():
+    process_unit = processor.ProcessUnit(
+        configuration(
+            units=(
+                {
+                    "phrase_from": "miles",
+                    "phrase_to": "kilometers",
+                    "conversion": 1.6,
+                    "can_be_word": True,
+                },
+                {
+                    "phrase_from": "square miles",
+                    "phrase_to": "km²",
+                    "conversion": 2.6,
+                    "can_be_word": False,
+                },
+            ),
+            phrases=(
+                {
+                    "phrase_from": "old road",
+                    "phrase_to": "new path",
+                    "direct": False,
+                    "mutations": True,
+                },
+            ),
+        )
+    )
+
+    assert process_unit.units_list["miles"]["replace_rules"] == ReplaceRules(
+        replace_with="kilometers",
+        lookup_length=1,
+        units=1.6,
+        can_be_word=True,
+    )
+    assert process_unit.word_conversions["old road"]["replace_rules"] == ReplaceRules(
+        replace_with="new path",
+        lookup_length=2,
+        mutations=True,
+    )
+    assert process_unit.units_list["square miles"]["replace_rules"].lookup_length == 2
+
+    assert set(process_unit.units_list["miles"]) == {"replace_rules"}
+    assert set(process_unit.word_conversions["old road"]) == {"replace_rules"}
+
+
+def test_feet_rule_reuses_prebuilt_conversion_without_multiplying_twice():
+    process_unit = processor.ProcessUnit(configuration(expect_feet=True, phrases=()))
+
+    assert process_unit.text_alteration("5'11 feet") == "179.3 cm"
 
 
 def test_docx_table_paragraph_processing(tmp_path: Path):

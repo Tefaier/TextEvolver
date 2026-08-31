@@ -1,12 +1,14 @@
 import pytest
 
+from text_evolver.processing import text_analysis
 from text_evolver.processing.text_analysis import (
+    ReplaceRules,
+    _text2int,
     convert_utf8_symbols,
     is_feet,
     redistribute_transformed_text,
     replace_iteration,
     string_empty,
-    text2int,
     text_cleaner,
 )
 
@@ -63,13 +65,62 @@ def test_replace_iteration_reports_unmatched_source():
 
 
 def test_spelled_numbers_and_feet_are_recognized():
-    assert text2int("twenty three miles") == ["23", "", "miles"]
+    assert _text2int("twenty three miles") == ["23", "", "miles"]
+    assert _text2int("5'11 5’11") == ["5.9163", "5.9163"]
     assert is_feet("5'11")
     assert is_feet("5’11")
     assert not is_feet(None)
     assert not is_feet("5 feet 11")
     assert not is_feet("5'11 extra")
     assert convert_utf8_symbols("Tom &amp; Jerry") == "Tom & Jerry"
+
+
+def test_replace_rules_are_typed_values():
+    assert ReplaceRules(replace_with="kilometers", lookup_length=1, units=1.6, can_be_word=True) == ReplaceRules(
+        replace_with="kilometers",
+        lookup_length=1,
+        units=1.6,
+        can_be_word=True,
+    )
+
+
+def test_replace_rules_require_positive_lookup_length():
+    with pytest.raises(ValueError, match="lookup length must be positive"):
+        ReplaceRules(replace_with="replacement", lookup_length=0)
+
+
+def test_find_in_clean_copies_only_the_relevant_map_window(monkeypatch):
+    modifier_windows: list[tuple[int, int]] = []
+    original_modifier = text_analysis._text_modifier
+
+    def record_modifier(start_location, words_num, replace_map_part, replace_rules, convert_units=True):
+        modifier_windows.append((start_location, len(replace_map_part)))
+        return original_modifier(
+            start_location,
+            words_num,
+            replace_map_part,
+            replace_rules,
+            convert_units,
+        )
+
+    monkeypatch.setattr(text_analysis, "_text_modifier", record_modifier)
+    text_analysis.find_in_clean(
+        ["before", "old", "road", "after"],
+        "old road",
+        ReplaceRules(replace_with="new path", lookup_length=2),
+    )
+    text_analysis.find_in_clean(
+        ["a", "b", "c", "d", "e", "f", "g", "h", "2", "miles"],
+        "miles",
+        ReplaceRules(
+            replace_with="kilometers",
+            lookup_length=1,
+            units=1.6,
+            can_be_word=True,
+        ),
+    )
+
+    assert modifier_windows == [(0, 2), (7, 8)]
 
 
 def test_string_empty_accepts_only_empty_or_whitespace_text():

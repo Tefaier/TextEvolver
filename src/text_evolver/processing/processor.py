@@ -104,15 +104,8 @@ class ProcessUnit:
         for phrase, item in self.units_list.items():
             results = find_in_clean(
                 clean_text,
-                item["split"],
                 phrase,
-                False,
-                {
-                    "units": item["conversion"],
-                    "replace_with": item["new unit"],
-                    "feet": self.units_list["feet"]["conversion"] if self.settings["feet check"] else None,
-                    "can be word": item["can be word"],
-                },
+                item["replace_rules"],
             )
             if results["found"]:
                 try:
@@ -124,15 +117,8 @@ class ProcessUnit:
         for phrase, item in self.word_conversions.items():
             results = find_in_clean(
                 clean_text,
-                item["split"],
                 phrase,
-                item["mutation"],
-                {
-                    "units": None,
-                    "replace_with": item["new words"],
-                    "feet": None,
-                    "can be word": None,
-                },
+                item["replace_rules"],
             )
             if results["found"]:
                 try:

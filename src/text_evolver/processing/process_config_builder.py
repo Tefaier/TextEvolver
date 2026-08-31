@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from text_evolver.db.models import Fandom, ImageConversion, PhraseConversion, Setting, UnitConversion
 from text_evolver.fandoms import FandomName
 from text_evolver.processing.pokemon_cache import PokemonRecord, load_pokemon_cache
+from text_evolver.processing.text_analysis import ReplaceRules
 
 
 @dataclass(frozen=True)
@@ -112,12 +113,37 @@ def configure_process_unit(unit: object, configuration: ProcessingConfiguration)
                     unit.settings["show_pokemon_weight"] = fandom["support_value_1"]
                     unit.settings["show_pokemon_height"] = fandom["support_value_2"]
                     _load_pokemons(unit, configuration.pokemons, int(fandom["separation"]))
+
+    feet_conversion = None
+    if configuration.expect_feet:
+        feet_conversion = next(
+            (
+                float(value["conversion"])
+                for value in configuration.units
+                if value["phrase_from"] == "feet"
+            ),
+            30.3,
+        )
     for value in configuration.units:
+        phrase_from = str(value["phrase_from"])
         unit.units_list[value["phrase_from"]] = {
-            "split": str(value["phrase_to"]).split(" "),
-            "new unit": value["phrase_to"],
-            "conversion": value["conversion"],
-            "can be word": value["can_be_word"],
+            "replace_rules": ReplaceRules(
+                replace_with=str(value["phrase_to"]),
+                lookup_length=len(phrase_from.split()),
+                units=float(value["conversion"]),
+                feet=feet_conversion,
+                can_be_word=bool(value["can_be_word"]),
+            ),
+        }
+    if configuration.expect_feet and "feet" not in unit.units_list:
+        unit.units_list["feet"] = {
+            "replace_rules": ReplaceRules(
+                replace_with="cm",
+                lookup_length=1,
+                units=30.3,
+                feet=feet_conversion,
+                can_be_word=True,
+            ),
         }
     for value in configuration.images:
         binaries = str(value["images"]).split("*")
@@ -143,18 +169,14 @@ def configure_process_unit(unit: object, configuration: ProcessingConfiguration)
         if value["direct"]:
             unit.direct_conversions[value["phrase_from"]] = value["phrase_to"]
         else:
+            phrase_from = str(value["phrase_from"])
             unit.word_conversions[value["phrase_from"]] = {
-                "split": str(value["phrase_from"]).split(" "),
-                "new words": value["phrase_to"],
-                "mutation": value["mutations"],
+                "replace_rules": ReplaceRules(
+                    replace_with=str(value["phrase_to"]),
+                    lookup_length=len(phrase_from.split()),
+                    mutations=bool(value["mutations"]),
+                ),
             }
-    if configuration.expect_feet and "feet" not in unit.units_list:
-        unit.units_list["feet"] = {
-            "split": ["feet"],
-            "new unit": "cm",
-            "conversion": 30.3,
-            "can be word": True,
-        }
 
 
 def _load_pokemons(unit: object, pokemons: tuple[PokemonRecord, ...], default_separation: int) -> None:
