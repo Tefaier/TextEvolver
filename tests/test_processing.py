@@ -236,10 +236,51 @@ def test_conversion_rules_are_built_when_process_unit_is_configured():
     assert set(process_unit.word_conversions["old road"]) == {"replace_rules"}
 
 
-def test_feet_rule_reuses_prebuilt_conversion_without_multiplying_twice():
+def test_feet_rule_converts_values_with_and_without_unit_word():
     process_unit = processor.ProcessUnit(configuration(expect_feet=True, phrases=()))
 
     assert process_unit.text_alteration("5'11 feet") == "179.3 cm"
+    assert process_unit.text_alteration("Height 5'11 and 5’11.") == "Height 179.3 cm and 179.3 cm."
+    assert process_unit.units_list["feet"]["replace_rules"].is_feet is True
+
+
+def test_non_feet_rule_does_not_parse_feet_formatted_digits():
+    process_unit = processor.ProcessUnit(
+        configuration(
+            units=(
+                {
+                    "phrase_from": "miles",
+                    "phrase_to": "kilometers",
+                    "conversion": 1.6,
+                    "can_be_word": True,
+                },
+            ),
+            phrases=(),
+        )
+    )
+
+    assert process_unit.text_alteration("5'11 miles") == "5'11 miles"
+    assert process_unit.units_list["miles"]["replace_rules"].is_feet is False
+
+
+def test_configured_feet_rule_converts_standalone_values_using_its_own_settings():
+    process_unit = processor.ProcessUnit(
+        configuration(
+            expect_feet=True,
+            units=(
+                {
+                    "phrase_from": "Feet",
+                    "phrase_to": "meters",
+                    "conversion": 0.3048,
+                    "can_be_word": True,
+                },
+            ),
+            phrases=(),
+        )
+    )
+
+    assert process_unit.text_alteration("6'0 Feet and 6'0") == "1.8 Meters and 1.8 meters"
+    assert set(process_unit.units_list) == {"Feet"}
 
 
 def test_docx_table_paragraph_processing(tmp_path: Path):

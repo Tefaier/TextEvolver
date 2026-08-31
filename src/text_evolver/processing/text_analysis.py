@@ -23,12 +23,14 @@ class ReplaceRules:
     lookup_length: int
     mutations: bool = False
     units: float | None = None
-    feet: float | None = None
+    is_feet: bool = False
     can_be_word: bool | None = None
 
     def __post_init__(self) -> None:
         if self.lookup_length < 1:
             raise ValueError("Replacement lookup length must be positive")
+        if self.is_feet and self.units is None:
+            raise ValueError("Feet replacement rules require a unit conversion")
 
 
 def string_with_meaning(text: str):
@@ -143,7 +145,7 @@ def replace_iteration(replace_map: list[list[str]], words: list[str]) -> list[st
     return words
 
 
-def _text2int(textnum, numwords={}, interimwords={}):
+def _text2int(textnum, numwords={}, interimwords={}, parse_feet: bool = False):
     units = [
         "zero", "one", "two", "three", "four", "five", "six", "seven", "eight",
         "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen",
@@ -182,7 +184,13 @@ def _text2int(textnum, numwords={}, interimwords={}):
     new_digit = False
 
     for word in textnum.split():
-        new_digit = is_feet(word) or is_float(word) or (was_tens and word in tens) or (was_units and word in tens + units) or was_decimal
+        new_digit = (
+            (parse_feet and is_feet(word))
+            or is_float(word)
+            or (was_tens and word in tens)
+            or (was_units and word in tens + units)
+            or was_decimal
+        )
         interim_ignore = (digit_length == 0 and word in interimwords)
         if (word not in numwords and word not in interimwords) or new_digit or interim_ignore: # apply changes and start new digit
             if digit_length > 0:
@@ -197,7 +205,7 @@ def _text2int(textnum, numwords={}, interimwords={}):
         if is_float(word): # number in words format
             digit_length += 1
             current += float(word)
-        elif is_feet(word): # feet'inches
+        elif parse_feet and is_feet(word): # feet'inches
             parts = FEET_SEPARATOR_PATTERN.split(word)
             digit_length += 1
             current += float(float(parts[0]) + float(parts[1]) * 0.0833)
@@ -230,12 +238,15 @@ def _text2int(textnum, numwords={}, interimwords={}):
     return numbers_res
 
 
+def _convert_unit_value(value: str, conversion: float) -> str:
+    return str(round(float(value) * conversion, 1)).replace('.0', '')
+
+
 def _text_modifier(
     start_location: int,
     words_num: int,
     replace_map_part: list[list[str]],
     replace_rules: ReplaceRules,
-    convert_units: bool = True,
 ) -> list[list[str]] | None:
     '''
     Builds replacement and improves it by preserving case
@@ -255,18 +266,22 @@ def _text_modifier(
     del replacer
 
     # go to past words and alter based on unit convertation
-    if convert_units and replace_rules.units is not None:
+    if replace_rules.units is not None:
         digit_check_start = max(0, start_location - digit_len_before)
-        digit_version = _text2int(" ".join([x[1] for x in replace_map_part[digit_check_start:start_location]]))
+        digit_version = _text2int(
+            " ".join([x[1] for x in replace_map_part[digit_check_start:start_location]]),
+            parse_feet=replace_rules.is_feet,
+        )
         for i in range(digit_check_start, start_location):
             replace_map_part[i][1] = digit_version[i - digit_check_start]
         digit_found = False
         for index in range(start_location - 1, digit_check_start-1, -1):
             if is_float(replace_map_part[index][1]):
                 digit_found = True
-                replace_map_part[index][1] = str(
-                    round(float(replace_map_part[index][1]) * replace_rules.units, 1)
-                ).replace('.0', '')
+                replace_map_part[index][1] = _convert_unit_value(
+                    replace_map_part[index][1],
+                    replace_rules.units,
+                )
             elif replace_map_part[index][1] in in_num_words:  # 'or' and 'so' added for special cases
                 pass
             elif not digit_found and replace_rules.can_be_word:
@@ -291,45 +306,40 @@ def find_in_clean(
     if clean_words == [''] or len(clean_words) < words_num:
         return {"found": False}
     results = {"found": False, "replace_map": [[x, x] for x in clean_words]}
-    feet_case = False
     i = 0
     while i < len(clean_words) + 1 - words_num:
-        if replace_rules.feet is not None and is_feet(clean_words[i]):
-            feet_case = True
-            word = results["replace_map"][i][0]
-            parts = FEET_SEPARATOR_PATTERN.split(word)
-            results["replace_map"][i][1] = str(
-                round((float(parts[0]) + float(parts[1]) * 0.0833) * replace_rules.feet, 1)
+        word_chunk = ' '.join(clean_words[i:i + words_num])
+        word_borders = re.split(to_find, word_chunk, flags=re.IGNORECASE, maxsplit=1)
+        if len(word_borders) != 1 and word_borders[0] == '' and (
+            word_borders[1] == '' or (replace_rules.mutations and word_borders[1] in possible_mutations)
+        ):
+            part_start = max(i - digit_len_before, 0) if replace_rules.units is not None else i
+            part_end = i + words_num
+            replace_map_part = [
+                entry.copy() for entry in results["replace_map"][part_start:part_end]
+            ]
+            modified_part = _text_modifier(
+                i - part_start,
+                words_num,
+                replace_map_part,
+                replace_rules,
             )
-        else:
-            word_chunk = ' '.join(clean_words[i:i + words_num])
-            word_borders = re.split(to_find, word_chunk, flags=re.IGNORECASE, maxsplit=1)
-            if len(word_borders) != 1 and word_borders[0] == '' and (
-                word_borders[1] == '' or (replace_rules.mutations and word_borders[1] in possible_mutations)
-            ):
-                convert_units = not feet_case
-                part_start = (
-                    max(i - digit_len_before, 0)
-                    if convert_units and replace_rules.units is not None
-                    else i
-                )
-                part_end = i + words_num
-                replace_map_part = [
-                    entry.copy() for entry in results["replace_map"][part_start:part_end]
-                ]
-                modified_part = _text_modifier(
-                    i - part_start,
-                    words_num,
-                    replace_map_part,
-                    replace_rules,
-                    convert_units=convert_units,
-                )
-                if modified_part is not None:
-                    results["found"] = True
-                    results["replace_map"][part_start:part_end] = modified_part
-                    i += words_num - 1
-            feet_case = False
+            if modified_part is not None:
+                results["found"] = True
+                results["replace_map"][part_start:part_end] = modified_part
+                i += words_num - 1
         i += 1
+
+    # afterwards go through just feet digits and convert them
+    if replace_rules.is_feet:
+        for source_and_replacement in results["replace_map"]:
+            source, replacement = source_and_replacement
+            if source != replacement or not is_feet(source):
+                continue
+            decimal_feet = _text2int(source, parse_feet=True)[0]
+            converted_value = _convert_unit_value(decimal_feet, replace_rules.units)
+            source_and_replacement[1] = f"{converted_value} {replace_rules.replace_with}".strip()
+            results["found"] = True
     return results
 
 

@@ -99,7 +99,6 @@ def configure_process_unit(unit: object, configuration: ProcessingConfiguration)
         {
             "pokemon": False,
             "coma in digits": configuration.use_comma_separator,
-            "feet check": configuration.expect_feet,
             "clean empty": configuration.clean_empty,
             "convert to utf": configuration.convert_to_utf,
         }
@@ -114,16 +113,6 @@ def configure_process_unit(unit: object, configuration: ProcessingConfiguration)
                     unit.settings["show_pokemon_height"] = fandom["support_value_2"]
                     _load_pokemons(unit, configuration.pokemons, int(fandom["separation"]))
 
-    feet_conversion = None
-    if configuration.expect_feet:
-        feet_conversion = next(
-            (
-                float(value["conversion"])
-                for value in configuration.units
-                if value["phrase_from"] == "feet"
-            ),
-            30.3,
-        )
     for value in configuration.units:
         phrase_from = str(value["phrase_from"])
         unit.units_list[value["phrase_from"]] = {
@@ -131,17 +120,19 @@ def configure_process_unit(unit: object, configuration: ProcessingConfiguration)
                 replace_with=str(value["phrase_to"]),
                 lookup_length=len(phrase_from.split()),
                 units=float(value["conversion"]),
-                feet=feet_conversion,
+                is_feet=configuration.expect_feet and phrase_from.casefold() == "feet",
                 can_be_word=bool(value["can_be_word"]),
             ),
         }
-    if configuration.expect_feet and "feet" not in unit.units_list:
+    if configuration.expect_feet and not any(
+        str(phrase_from).casefold() == "feet" for phrase_from in unit.units_list
+    ):
         unit.units_list["feet"] = {
             "replace_rules": ReplaceRules(
                 replace_with="cm",
                 lookup_length=1,
                 units=30.3,
-                feet=feet_conversion,
+                is_feet=True,
                 can_be_word=True,
             ),
         }

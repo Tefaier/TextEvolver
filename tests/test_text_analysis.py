@@ -66,7 +66,8 @@ def test_replace_iteration_reports_unmatched_source():
 
 def test_spelled_numbers_and_feet_are_recognized():
     assert _text2int("twenty three miles") == ["23", "", "miles"]
-    assert _text2int("5'11 5’11") == ["5.9163", "5.9163"]
+    assert _text2int("5'11 5’11") == ["5'11", "5’11"]
+    assert _text2int("5'11 5’11", parse_feet=True) == ["5.9163", "5.9163"]
     assert is_feet("5'11")
     assert is_feet("5’11")
     assert not is_feet(None)
@@ -88,19 +89,21 @@ def test_replace_rules_require_positive_lookup_length():
     with pytest.raises(ValueError, match="lookup length must be positive"):
         ReplaceRules(replace_with="replacement", lookup_length=0)
 
+    with pytest.raises(ValueError, match="Feet replacement rules require"):
+        ReplaceRules(replace_with="centimeters", lookup_length=1, is_feet=True)
+
 
 def test_find_in_clean_copies_only_the_relevant_map_window(monkeypatch):
     modifier_windows: list[tuple[int, int]] = []
     original_modifier = text_analysis._text_modifier
 
-    def record_modifier(start_location, words_num, replace_map_part, replace_rules, convert_units=True):
+    def record_modifier(start_location, words_num, replace_map_part, replace_rules):
         modifier_windows.append((start_location, len(replace_map_part)))
         return original_modifier(
             start_location,
             words_num,
             replace_map_part,
             replace_rules,
-            convert_units,
         )
 
     monkeypatch.setattr(text_analysis, "_text_modifier", record_modifier)
