@@ -301,17 +301,33 @@ def find_in_clean(
     clean_words: list,
     to_find: str,
     replace_rules: ReplaceRules,
-):  # time eater - try to solve
+):
     words_num = replace_rules.lookup_length
     if clean_words == [''] or len(clean_words) < words_num:
         return {"found": False}
     results = {"found": False, "replace_map": [[x, x] for x in clean_words]}
+    clean_text = ' '.join(clean_words)
+    word_starts: list[int] = []
+    next_word_start = 0
+    for word in clean_words:
+        word_starts.append(next_word_start)
+        next_word_start += len(word) + 1
+    lookup_pattern = re.compile(to_find, flags=re.IGNORECASE)
+
     i = 0
     while i < len(clean_words) + 1 - words_num:
-        word_chunk = ' '.join(clean_words[i:i + words_num])
-        word_borders = re.split(to_find, word_chunk, flags=re.IGNORECASE, maxsplit=1)
-        if len(word_borders) != 1 and word_borders[0] == '' and (
-            word_borders[1] == '' or (replace_rules.mutations and word_borders[1] in possible_mutations)
+        # match in part of string using precomputed offsets
+        last_word_index = i + words_num - 1
+        window_end = word_starts[last_word_index] + len(clean_words[last_word_index])
+        match = lookup_pattern.match(clean_text, word_starts[i], window_end)
+        match_end = match.end() if match is not None else -1
+        if match is not None and (
+            match_end == window_end or (
+                replace_rules.mutations and any(
+                    match_end + len(mutation) == window_end and clean_text.startswith(mutation, match_end, window_end)
+                    for mutation in possible_mutations
+                )
+            )
         ):
             part_start = max(i - digit_len_before, 0) if replace_rules.units is not None else i
             part_end = i + words_num
