@@ -260,6 +260,13 @@ def test_non_feet_rule_does_not_parse_feet_formatted_digits():
     )
 
     assert process_unit.text_alteration("5'11 miles") == "5'11 miles"
+    assert process_unit.text_alteration("From 5 to 10 miles") == "From 5 to 16 kilometers"
+    assert process_unit.text_alteration("Some random words before 10 miles") == (
+        "Some random words before 16 kilometers"
+    )
+    assert process_unit.text_alteration("This is a random ordinary word miles") == (
+        "This is a random ordinary word miles"
+    )
     assert process_unit.units_list["miles"]["replace_rules"].is_feet is False
 
 

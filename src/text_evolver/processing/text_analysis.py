@@ -2,19 +2,47 @@ import html
 import re
 import unicodedata
 from bisect import bisect_right
+from collections.abc import Sequence
 from dataclasses import dataclass
 from difflib import SequenceMatcher
+from types import MappingProxyType
 
-in_num_words = ["of", '', 'to', 'or', 'so']
+in_num_words = frozenset({"of", '', 'to', 'or', 'so'})
 possible_mutations = ['s', "'", "'s", 'es', 'ов', 'ы', 'а', '’s']
 digit_len_before = 7
 MEANINGFULL_CHARACTER_PATTERN = re.compile(r"[^\W_]")
 EMPTY_STRING_PATTERN = re.compile(r"\s*")
 FEET_SEPARATOR_PATTERN = re.compile(r"['’]")
-FEET_PATTERN = re.compile(rf"\d+{FEET_SEPARATOR_PATTERN.pattern}\d+")
+FEET_PATTERN = re.compile(
+    rf"(?P<feet>\d+){FEET_SEPARATOR_PATTERN.pattern}(?P<inches>\d+)"
+)
 ERASE_WITH_PERIOD_SEPARATOR_PATTERN = re.compile(r"[^\w.'’]|_|(?<!\d)\.|\.(?!\d)")
 ERASE_WITH_COMMA_SEPARATOR_PATTERN = re.compile(r"[^\w,'’]|_|(?<!\d),|,(?!\d)")
 MULTIPLE_SPACES_PATTERN = re.compile(r" {2,}")
+
+NUMBER_UNIT_WORDS = (
+    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+    "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen",
+    "eighteen", "nineteen",
+)
+NUMBER_TENS = ("twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety")
+NUMBER_SCALES = ("hundred", "thousand", "million", "billion", "trillion")
+NUMBER_DECIMALS = frozenset({"half", "quarter", "quarters"})
+IMPLICIT_ONE_WORDS = frozenset({"dozen", *NUMBER_DECIMALS, *NUMBER_SCALES})
+NUMBER_UNIT_WORD_SET = frozenset(NUMBER_UNIT_WORDS)
+NUMBER_TENS_SET = frozenset(NUMBER_TENS)
+NUMBER_WORDS = MappingProxyType(
+    {
+        "half": (0.5, 0),
+        "quarter": (0.25, 0),
+        "quarters": (0.25, 0),
+        "dozen": (12, 0),
+        **{word: (1, value) for value, word in enumerate(NUMBER_UNIT_WORDS)},
+        **{word: (1, value * 10) for value, word in enumerate(NUMBER_TENS, start=2)},
+        **{word: (10 ** (index * 3 or 2), 0) for index, word in enumerate(NUMBER_SCALES)},
+    }
+)
+INTERIM_NUMBER_WORDS = MappingProxyType({"and": (1, 0), "an": (1, 0), "a": (1, 0)})
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +61,13 @@ class ReplaceRules:
             raise ValueError("Feet replacement rules require a unit conversion")
 
 
+@dataclass(frozen=True, slots=True)
+class NumberSpan:
+    start: int
+    end: int
+    value: int | float
+
+
 def string_with_meaning(text: str):
     return MEANINGFULL_CHARACTER_PATTERN.search(text) is not None
 
@@ -41,14 +76,17 @@ def string_empty(text: str) -> bool:
     return EMPTY_STRING_PATTERN.fullmatch(text) is not None
 
 
-def is_float(string: str):
+def _parse_float(string: str | None) -> float | None:
     if string is None:
-        return False
+        return None
     try:
-        float(string)
-        return True
+        return float(string)
     except ValueError:
-        return False
+        return None
+
+
+def is_float(string: str | None) -> bool:
+    return _parse_float(string) is not None
 
 
 def is_feet(string: str | None) -> bool:
@@ -145,100 +183,139 @@ def replace_iteration(replace_map: list[list[str]], words: list[str]) -> list[st
     return words
 
 
-def _text2int(textnum, numwords={}, interimwords={}, parse_feet: bool = False):
-    units = [
-        "zero", "one", "two", "three", "four", "five", "six", "seven", "eight",
-        "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen",
-        "sixteen", "seventeen", "eighteen", "nineteen",
-    ]
+def _parse_number_words(words: Sequence[str], start: int) -> NumberSpan | None:
+    total: int | float = 0
+    group: int | float = 0
+    index = start
+    consumed_number = False
+    after_and = False
+    last_kind: str | None = None
 
-    tens = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
+    while index < len(words):
+        word = words[index]
+        if word == "and":
+            next_index = index + 1
+            article_found = False
+            while next_index < len(words) and words[next_index] in {"a", "an"}:
+                article_found = True
+                next_index += 1
+            valid_continuation = (
+                next_index < len(words)
+                and words[next_index] in NUMBER_WORDS
+                and (not article_found or words[next_index] in IMPLICIT_ONE_WORDS)
+            )
+            if not consumed_number or not valid_continuation:
+                # invalid continuation, just finish
+                break
+            after_and = True
+            index += 1
+            continue
 
-    scales = ["hundred", "thousand", "million", "billion", "trillion"]
+        if word in {"a", "an"}:
+            if after_and:
+                index += 1
+                continue
+            if (
+                consumed_number
+                or index + 1 >= len(words)
+                or words[index + 1] not in IMPLICIT_ONE_WORDS
+            ):
+                # abnormal "a"
+                break
+            # implicit 1
+            group = 1
+            consumed_number = True
+            last_kind = "unit"
+            index += 1
+            continue
 
-    decimals = ["half", "quarter", "quarters"]
+        if word in NUMBER_UNIT_WORD_SET:
+            value = NUMBER_WORDS[word][1]
+            if not after_and and (
+                last_kind == "unit"
+                or (last_kind == "tens" and value > 9)
+                or last_kind == "fraction"
+            ):
+                break
+            group += value
+            consumed_number = True
+            after_and = False
+            last_kind = "unit"
+        elif word in NUMBER_TENS_SET:
+            if not after_and and last_kind in {"unit", "tens", "fraction"}:
+                break
+            group += NUMBER_WORDS[word][1]
+            consumed_number = True
+            after_and = False
+            last_kind = "tens"
+        elif word == "hundred":
+            if last_kind in {"hundred", "fraction"}:
+                break
+            group = (group or 1) * 100
+            consumed_number = True
+            after_and = False
+            last_kind = "hundred"
+        elif word == "dozen":
+            if last_kind in {"dozen", "fraction"}:
+                break
+            group = (group or 1) * 12
+            consumed_number = True
+            after_and = False
+            last_kind = "dozen"
+        elif word in NUMBER_DECIMALS:
+            fraction = NUMBER_WORDS[word][0]
+            group = group + fraction if after_and else (group or 1) * fraction
+            consumed_number = True
+            after_and = False
+            last_kind = "fraction"
+        elif word in NUMBER_SCALES[1:]:
+            scale = NUMBER_WORDS[word][0]
+            total += (group or 1) * scale
+            group = 0
+            consumed_number = True
+            after_and = False
+            last_kind = "scale"
+        else:
+            break
+        index += 1
 
-    interimwords["and"] = (1, 0)
-    interimwords["an"] = (1, 0)
-    interimwords["a"] = (1, 0)
-
-    if not numwords:
-        numwords["half"] = (0.5, 0)
-        numwords["quarter"] = (0.25, 0)
-        numwords["quarters"] = (0.25, 0)
-        numwords["dozen"] = (12, 0)
-        for idx, word in enumerate(units):
-            numwords[word] = (1, idx)
-        for idx, word in enumerate(tens):
-            numwords[word] = (1, idx * 10)
-        for idx, word in enumerate(scales):
-            numwords[word] = (10 ** (idx * 3 or 2), 0)
-
-    numbers_res = textnum.split()
-    digit_start = 0
-    digit_length = 0
-    current = result = 0
-    was_tens = False
-    was_units = False
-    was_decimal = False
-    new_digit = False
-
-    for word in textnum.split():
-        new_digit = (
-            (parse_feet and is_feet(word))
-            or is_float(word)
-            or (was_tens and word in tens)
-            or (was_units and word in tens + units)
-            or was_decimal
-        )
-        interim_ignore = (digit_length == 0 and word in interimwords)
-        if (word not in numwords and word not in interimwords) or new_digit or interim_ignore: # apply changes and start new digit
-            if digit_length > 0:
-                numbers_res = numbers_res[:digit_start] + [str(result + current)] + [''] * (
-                            digit_length - 1) + numbers_res[digit_start + digit_length:]
-            digit_start += digit_length if new_digit else digit_length + 1
-            digit_length = 0
-            current = result = 0
-            was_tens = False
-            was_units = False
-            was_decimal = False
-        if is_float(word): # number in words format
-            digit_length += 1
-            current += float(word)
-        elif parse_feet and is_feet(word): # feet'inches
-            parts = FEET_SEPARATOR_PATTERN.split(word)
-            digit_length += 1
-            current += float(float(parts[0]) + float(parts[1]) * 0.0833)
-        elif word in numwords or (digit_length > 0 and word in interimwords): # number is to be continued and is to be used
-            digit_length += 1
-            scale, increment = numwords.get(word, interimwords.get(word))
-            if word in units:
-                was_tens = False
-                was_units = True
-            elif word in tens:
-                was_tens = True
-                was_units = False
-            elif word in decimals:
-                was_tens = False
-                was_units = False
-                was_decimal = True
-            else:
-                was_tens = False
-                was_units = False
-            if current == 0 and increment == 0 and word not in interimwords:
-                current = 1 * scale
-            else:
-                current = current * scale + increment
-            if scale > 100 or word in interimwords:
-                result += current
-                current = 0
-
-    if digit_length > 0:
-        numbers_res = numbers_res[:digit_start] + [str(result + current)] + [''] * (digit_length - 1) + numbers_res[digit_start + digit_length:]
-    return numbers_res
+    if not consumed_number:
+        return None
+    return NumberSpan(start, index, total + group)
 
 
-def _convert_unit_value(value: str, conversion: float) -> str:
+def _text2int(words: Sequence[str], parse_feet: bool = False) -> NumberSpan | None:
+    """Return only the last numeric group found in an existing token sequence."""
+    last_span: NumberSpan | None = None
+    index = 0
+    while index < len(words):
+        word = words[index]
+        feet_match = FEET_PATTERN.fullmatch(word) if parse_feet else None
+        if feet_match is not None:
+            last_span = NumberSpan(
+                index,
+                index + 1,
+                float(feet_match.group("feet")) + float(feet_match.group("inches")) / 12,
+            )
+            index += 1
+            continue
+
+        float_value = _parse_float(word)
+        if float_value is not None:
+            last_span = NumberSpan(index, index + 1, float_value)
+            index += 1
+            continue
+
+        number_span = _parse_number_words(words, index)
+        if number_span is None:
+            index += 1
+            continue
+        last_span = number_span
+        index = number_span.end
+    return last_span
+
+
+def _convert_unit_value(value: int | float, conversion: float) -> str:
     return str(round(float(value) * conversion, 1)).replace('.0', '')
 
 
@@ -268,32 +345,32 @@ def _text_modifier(
     # go to past words and alter based on unit convertation
     if replace_rules.units is not None:
         digit_check_start = max(0, start_location - digit_len_before)
-        digit_version = _text2int(
-            " ".join([x[1] for x in replace_map_part[digit_check_start:start_location]]),
+        digit_words = [entry[1] for entry in replace_map_part[digit_check_start:start_location]]
+        digit_span = _text2int(
+            digit_words,
             parse_feet=replace_rules.is_feet,
         )
-        for i in range(digit_check_start, start_location):
-            replace_map_part[i][1] = digit_version[i - digit_check_start]
-        digit_found = False
-        for index in range(start_location - 1, digit_check_start-1, -1):
-            if is_float(replace_map_part[index][1]):
-                digit_found = True
-                replace_map_part[index][1] = _convert_unit_value(
-                    replace_map_part[index][1],
-                    replace_rules.units,
-                )
-            elif replace_map_part[index][1] in in_num_words:  # 'or' and 'so' added for special cases
-                pass
-            elif not digit_found and replace_rules.can_be_word:
-                # if can be just word then do not replace at all and treat it as not a unit conversion at all
-                return None
-            elif not digit_found:
-                # implicit 1 of unit
-                replace_map_part[start_location][1] = str(replace_rules.units) + (
-                    (" " + replace_map_part[start_location][1]) if replace_map_part[start_location][1] != '' else '')
-                break
-            else:
-                break
+        usable_digit = digit_span is not None and all(
+            digit_words[index] in in_num_words
+            for index in range(digit_span.end, len(digit_words))
+        )
+        if usable_digit:
+            # replace value and erase all other number parts
+            span_start = digit_check_start + digit_span.start
+            span_end = digit_check_start + digit_span.end
+            replace_map_part[span_start][1] = _convert_unit_value(
+                digit_span.value,
+                replace_rules.units,
+            )
+            for index in range(span_start + 1, span_end):
+                replace_map_part[index][1] = ''
+        elif replace_rules.can_be_word:
+            # if can be just word then do not replace at all and treat it as not a unit conversion at all
+            return None
+        else:
+            # implicit 1 of unit
+            replace_map_part[start_location][1] = str(replace_rules.units) + (
+                (" " + replace_map_part[start_location][1]) if replace_map_part[start_location][1] != '' else '')
     return replace_map_part
 
 
@@ -352,8 +429,10 @@ def find_in_clean(
             source, replacement = source_and_replacement
             if source != replacement or not is_feet(source):
                 continue
-            decimal_feet = _text2int(source, parse_feet=True)[0]
-            converted_value = _convert_unit_value(decimal_feet, replace_rules.units)
+            feet_span = _text2int([source], parse_feet=True)
+            if feet_span is None:
+                continue
+            converted_value = _convert_unit_value(feet_span.value, replace_rules.units)
             source_and_replacement[1] = f"{converted_value} {replace_rules.replace_with}".strip()
             results["found"] = True
     return results

@@ -2,6 +2,8 @@ import pytest
 
 from text_evolver.processing import text_analysis
 from text_evolver.processing.text_analysis import (
+    NUMBER_WORDS,
+    NumberSpan,
     ReplaceRules,
     _text2int,
     convert_utf8_symbols,
@@ -65,15 +67,57 @@ def test_replace_iteration_reports_unmatched_source():
 
 
 def test_spelled_numbers_and_feet_are_recognized():
-    assert _text2int("twenty three miles") == ["23", "", "miles"]
-    assert _text2int("5'11 5’11") == ["5'11", "5’11"]
-    assert _text2int("5'11 5’11", parse_feet=True) == ["5.9163", "5.9163"]
+    assert _text2int(["twenty", "three", "miles"]) == NumberSpan(start=0, end=2, value=23)
+    assert _text2int(["five", "to", "ten"]) == NumberSpan(start=2, end=3, value=10)
+    assert _text2int(["5'11", "5’11"]) is None
+    feet_span = _text2int(["5'11", "5’11"], parse_feet=True)
+    assert feet_span is not None
+    assert (feet_span.start, feet_span.end) == (1, 2)
+    assert feet_span.value == pytest.approx(5 + 11 / 12)
     assert is_feet("5'11")
     assert is_feet("5’11")
     assert not is_feet(None)
     assert not is_feet("5 feet 11")
     assert not is_feet("5'11 extra")
     assert convert_utf8_symbols("Tom &amp; Jerry") == "Tom & Jerry"
+
+
+@pytest.mark.parametrize(
+    ("words", "expected"),
+    [
+        (["zero"], NumberSpan(0, 1, 0)),
+        (["one", "hundred", "and", "twenty", "three"], NumberSpan(0, 5, 123)),
+        (["two", "thousand", "three", "hundred"], NumberSpan(0, 4, 2300)),
+        (["two", "hundred", "thousand"], NumberSpan(0, 3, 200_000)),
+        (["two", "hundred", "thirty", "four", "thousand"], NumberSpan(0, 5, 234_000)),
+        (["one", "hundred", "and", "twenty", "thousand"], NumberSpan(0, 5, 120_000)),
+        (
+            ["one", "million", "one", "hundred", "and", "twenty", "thousand"],
+            NumberSpan(0, 7, 1_120_000),
+        ),
+        (["two", "and", "a", "half"], NumberSpan(0, 4, 2.5)),
+        (["three", "quarters"], NumberSpan(0, 2, 0.75)),
+        (["one", "and", "a", "half", "million"], NumberSpan(0, 5, 1_500_000)),
+        (["two", "dozen"], NumberSpan(0, 2, 24)),
+        (["million", "and", "a", "hundred", "thousand"], NumberSpan(0, 5, 1_100_000)),
+    ],
+)
+def test_text2int_number_grammar(words: list[str], expected: NumberSpan):
+    assert _text2int(words) == expected
+
+
+def test_text2int_scans_random_word_context_without_treating_articles_as_numbers():
+    assert _text2int(["this", "is", "a", "random", "piece", "of", "text"]) is None
+    assert _text2int(["random", "words", "before", "twenty", "three", "more", "words"]) == NumberSpan(
+        3,
+        5,
+        23,
+    )
+    assert _text2int(["random", "text", "before", "a", "hundred", "more", "words"]) == NumberSpan(
+        3,
+        5,
+        100,
+    )
 
 
 def test_replace_rules_are_typed_values():
