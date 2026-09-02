@@ -15,14 +15,10 @@ def _stored_password(password: str, user_id: int, settings: AppSettings) -> User
     )
 
 
-def test_password_ciphertext_is_bound_to_user_and_key_version(app_settings):
+def test_password_ciphertext_uses_key_version(app_settings):
     stored = _stored_password("secret password", user_id=7, settings=app_settings)
 
     assert verify_password("secret password", stored, app_settings)
-
-    stored.user_id = 8
-    assert not verify_password("secret password", stored, app_settings)
-    stored.user_id = 7
 
     stored.key_version = app_settings.password_key_previous_version
     assert not verify_password("secret password", stored, app_settings)

@@ -147,14 +147,15 @@ in deterministic tests.
 
 ### Password-key rotation
 
-Passwords are stored in `user_password` as AES-256-GCM ciphertext with a fresh
-12-byte nonce and the key version; the authentication tag is part of the
-ciphertext. Keys remain only in application configuration and must never be
-committed or logged.
+Passwords are stored in `user_password` as AES-256-GCM ciphertext with a fresh,
+database-unique 12-byte nonce and the key version; the authentication tag is
+part of the ciphertext. Registration retries nonce generation if the database
+detects a collision. Keys remain only in application configuration and must
+never be committed or logged.
 
 To rotate keys, move the existing current key and version to
 `PASSWORD_KEY_PREVIOUS` and `PASSWORD_KEY_PREVIOUS_VERSION`, generate a new
 current key, and increment the current version. A successful login using the
-previous key re-encrypts that user's password with the current key. Keep the
-previous key configured until every existing password has been re-encrypted;
-records using unavailable key versions cannot authenticate.
+previous key continues using that stored key version. Keep the previous key
+configured while any password records use it; records using unavailable key
+versions cannot authenticate.

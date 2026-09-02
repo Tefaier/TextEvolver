@@ -5,12 +5,14 @@ from dataclasses import dataclass
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from fastapi import HTTPException, Request, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from text_evolver.config import AppSettings
 from text_evolver.db.models import UserAccount, UserPassword
 
 PASSWORD_NONCE_BYTES = 12
+PASSWORD_NONCE_INSERT_ATTEMPTS = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +33,37 @@ def encrypt_password(password: str, settings: AppSettings) -> EncryptedPassword:
     return EncryptedPassword(encoded_password=encoded_password, nonce=nonce, key_version=key_version)
 
 
+def add_encrypted_password(
+    session: Session,
+    user_id: int,
+    password: str,
+    settings: AppSettings,
+) -> UserPassword:
+    for _ in range(PASSWORD_NONCE_INSERT_ATTEMPTS):
+        encrypted = encrypt_password(password, settings)
+        stored = UserPassword(
+            user_id=user_id,
+            encoded_password=encrypted.encoded_password,
+            nonce=encrypted.nonce,
+            key_version=encrypted.key_version,
+        )
+        try:
+            with session.begin_nested():
+                session.add(stored)
+                session.flush()
+        except IntegrityError as exception:
+            diagnostic = getattr(exception.orig, "diag", None)
+            message = str(exception.orig).lower()
+            if getattr(diagnostic, "constraint_name", None) == "uq_user_password_nonce" or (
+                "unique" in message and "user_password.nonce" in message
+            ):
+                continue
+            raise
+        else:
+            return stored
+    raise RuntimeError("Could not generate a unique password nonce")
+
+
 def verify_password(password: str, stored: UserPassword, settings: AppSettings) -> bool:
     key = settings.password_key_for_version(stored.key_version)
     if key is None or len(stored.nonce) != PASSWORD_NONCE_BYTES:
@@ -44,13 +77,6 @@ def verify_password(password: str, stored: UserPassword, settings: AppSettings) 
     except (InvalidTag, ValueError):
         return False
     return hmac.compare_digest(decrypted, password.encode("utf-8"))
-
-
-def store_encrypted_password(stored: UserPassword, password: str, settings: AppSettings) -> None:
-    encrypted = encrypt_password(password, settings)
-    stored.encoded_password = encrypted.encoded_password
-    stored.nonce = encrypted.nonce
-    stored.key_version = encrypted.key_version
 
 
 def login(request: Request, user: UserAccount) -> None:

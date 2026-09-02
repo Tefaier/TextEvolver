@@ -33,15 +33,14 @@ from text_evolver.services import (
     validate_credentials,
 )
 from text_evolver.web.auth import (
+    add_encrypted_password,
     csrf_token,
     current_user,
-    encrypt_password,
     flash,
     login,
     logout,
     pop_flashes,
     require_user,
-    store_encrypted_password,
     validate_csrf,
     verify_password,
 )
@@ -152,15 +151,7 @@ async def register_submit(
         user = UserAccount(username=username)
         session.add(user)
         session.flush()
-        encrypted = encrypt_password(password, app_settings)
-        session.add(
-            UserPassword(
-                user_id=user.id,
-                encoded_password=encrypted.encoded_password,
-                nonce=encrypted.nonce,
-                key_version=encrypted.key_version,
-            )
-        )
+        add_encrypted_password(session, user.id, password, app_settings)
     except ValidationError as exc:
         flash(request, str(exc))
         return render(request, "register.html")

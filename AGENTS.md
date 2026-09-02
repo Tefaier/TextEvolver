@@ -97,10 +97,10 @@ Windows absolute paths, string-built separators, or CWD temporary files.
 - Keep the server-rendered UI unless a separate API/frontend change is
   explicitly requested.
 - All state-changing forms require the signed-session CSRF token.
-- Passwords are AES-256-GCM encrypted in `user_password` with a random nonce
-  and key version. New writes use the current key; reads accept only the
-  current or configured previous key and rotate previous-key records on login.
-  Never log plaintext credentials, encryption keys, nonces, or ciphertext.
+- Passwords are AES-256-GCM encrypted in `user_password` with a unique random
+  nonce and key version. New writes use the current key; reads accept only the
+  current or configured previous key. Never log plaintext credentials,
+  encryption keys, nonces, or ciphertext.
 - Parse submitted booleans explicitly; never use `eval()`.
 - Validate setting ownership/public access in services or route dependencies.
 - Sanitize upload names with `Path(filename).name` and preserve job isolation.

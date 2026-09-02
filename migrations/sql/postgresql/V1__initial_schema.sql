@@ -10,7 +10,8 @@ CREATE TABLE user_password (
     user_id BIGINT NOT NULL UNIQUE REFERENCES user_account(id) ON DELETE CASCADE,
     encoded_password BYTEA NOT NULL CHECK (octet_length(encoded_password) >= 16),
     nonce BYTEA NOT NULL CHECK (octet_length(nonce) = 12),
-    key_version INTEGER NOT NULL CHECK (key_version >= 1)
+    key_version INTEGER NOT NULL CHECK (key_version >= 1),
+    CONSTRAINT uq_user_password_nonce UNIQUE (nonce)
 );
 
 CREATE TABLE setting (

@@ -1,3 +1,5 @@
+import secrets
+
 from conftest import csrf_from
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -27,7 +29,7 @@ def test_registration_encrypts_password(client: TestClient, database, app_settin
         assert not verify_password("wrong-password", stored, app_settings)
 
 
-def test_login_rotates_password_encrypted_with_previous_key(client: TestClient, database, app_settings):
+def test_login_accepts_password_encrypted_with_previous_key(client: TestClient, database, app_settings):
     previous_settings = app_settings.model_copy(
         update={
             "password_key_current": app_settings.password_key_previous,
@@ -50,7 +52,6 @@ def test_login_rotates_password_encrypted_with_previous_key(client: TestClient, 
         session.add(stored)
         session.commit()
         user_id = user.id
-        old_nonce = stored.nonce
 
     token = csrf_from(client.get("/login"))
     response = client.post(
@@ -63,9 +64,57 @@ def test_login_rotates_password_encrypted_with_previous_key(client: TestClient, 
     with Session(database) as session:
         stored = session.scalar(select(UserPassword).where(UserPassword.user_id == user_id))
         assert stored is not None
-        assert stored.key_version == app_settings.password_key_current_version
-        assert stored.nonce != old_nonce
+        assert stored.key_version == app_settings.password_key_previous_version
         assert verify_password("old-key-password", stored, app_settings)
+
+
+def test_registration_retries_when_password_nonce_collides(
+    client: TestClient,
+    database,
+    app_settings,
+    monkeypatch,
+):
+    colliding_nonce = b"\x00" * 12
+    replacement_nonce = b"\x01" * 12
+    with Session(database) as session:
+        existing_user = UserAccount(username="existing-user")
+        session.add(existing_user)
+        session.flush()
+        session.add(
+            UserPassword(
+                user_id=existing_user.id,
+                encoded_password=b"x" * 16,
+                nonce=colliding_nonce,
+                key_version=app_settings.password_key_current_version,
+            )
+        )
+        session.commit()
+
+    token = csrf_from(client.get("/register"))
+    generated_nonces = iter((colliding_nonce, replacement_nonce))
+    original_token_bytes = secrets.token_bytes
+    monkeypatch.setattr(
+        "text_evolver.web.auth.secrets.token_bytes",
+        lambda size: next(generated_nonces) if size == 12 else original_token_bytes(size),
+    )
+    response = client.post(
+        "/register",
+        data={
+            "csrf_token": token,
+            "username": "nonce-retry-user",
+            "password": "encrypted password",
+            "confirm": "encrypted password",
+        },
+    )
+
+    assert response.status_code == 200
+    with Session(database) as session:
+        user = session.scalar(select(UserAccount).where(UserAccount.username == "nonce-retry-user"))
+        assert user is not None
+        stored = session.scalar(select(UserPassword).where(UserPassword.user_id == user.id))
+        assert stored is not None
+        assert stored.nonce == replacement_nonce
+        assert verify_password("encrypted password", stored, app_settings)
 
 
 def test_csrf_is_required_for_mutations(registered_client: TestClient):

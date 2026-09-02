@@ -1,7 +1,7 @@
 from typing import Optional
 import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, Enum, Float, ForeignKey, Index, Integer, LargeBinary, String, TIMESTAMP, Text, text
+from sqlalchemy import Boolean, CheckConstraint, Enum, Float, ForeignKey, Index, Integer, LargeBinary, String, TIMESTAMP, Text, UniqueConstraint, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
@@ -50,7 +50,8 @@ class UserPassword(Base):
     __table_args__ = (
         CheckConstraint('key_version >= 1'),
         CheckConstraint('length(encoded_password) >= 16'),
-        CheckConstraint('length(nonce) = 12')
+        CheckConstraint('length(nonce) = 12'),
+        UniqueConstraint('nonce', name='uq_user_password_nonce')
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

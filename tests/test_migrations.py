@@ -57,6 +57,7 @@ def test_postgresql_and_sqlite_baselines_declare_the_same_tables():
     assert "REGEX BOOLEAN NOT NULL DEFAULT FALSE" in postgresql_sql
     assert "ENCODED_PASSWORD BYTEA NOT NULL" in postgresql_sql
     assert "NONCE BYTEA NOT NULL" in postgresql_sql
+    assert "CONSTRAINT UQ_USER_PASSWORD_NONCE UNIQUE (NONCE)" in postgresql_sql
 
 
 def test_sqlalchemy_model_generation_is_deterministic(tmp_path: Path):
