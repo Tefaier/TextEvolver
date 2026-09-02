@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from starlette.datastructures import UploadFile
 
 from text_evolver.config import AppSettings, get_application_settings
-from text_evolver.db.models import ProcessingJob, Setting, UserAccount
+from text_evolver.db.models import ProcessingJob, Setting, UserAccount, UserPassword
 from text_evolver.db.session import get_db
 from text_evolver.services import (
     ALLOWED_EXTENSIONS,
@@ -35,12 +35,13 @@ from text_evolver.services import (
 from text_evolver.web.auth import (
     csrf_token,
     current_user,
+    encrypt_password,
     flash,
-    hash_password,
     login,
     logout,
     pop_flashes,
     require_user,
+    store_encrypted_password,
     validate_csrf,
     verify_password,
 )
@@ -102,15 +103,24 @@ def login_page(request: Request, session: Session = Depends(get_db)) -> Response
 
 
 @router.post("/login", name="login")
-async def login_submit(request: Request, session: Session = Depends(get_db)) -> Response:
+async def login_submit(
+    request: Request,
+    session: Session = Depends(get_db),
+    app_settings: AppSettings = Depends(get_application_settings),
+) -> Response:
     await validate_csrf(request)
     form = await request.form()
     username = str(form.get("username", "")).strip()
     password = str(form.get("password", ""))
     user = session.scalar(select(UserAccount).where(UserAccount.username == username))
-    if user is None or not verify_password(password, user.password_hash):
+    stored_password = (
+        None
+        if user is None
+        else session.scalar(select(UserPassword).where(UserPassword.user_id == user.id))
+    )
+    if user is None or stored_password is None or not verify_password(password, stored_password, app_settings):
         flash(request, "User with these username and password does not exist")
-        return render(request, "loging.html" if user is None else "loging.html")
+        return render(request, "loging.html")
     user.last_entry = dt.datetime.now(dt.UTC)
     login(request, user)
     flash(request, f"You successfully logged into account {user.username}", "success")
@@ -125,7 +135,11 @@ def register_page(request: Request, session: Session = Depends(get_db)) -> Respo
 
 
 @router.post("/register", name="register")
-async def register_submit(request: Request, session: Session = Depends(get_db)) -> Response:
+async def register_submit(
+    request: Request,
+    session: Session = Depends(get_db),
+    app_settings: AppSettings = Depends(get_application_settings),
+) -> Response:
     await validate_csrf(request)
     form = await request.form()
     username = str(form.get("username", "")).strip()
@@ -135,9 +149,18 @@ async def register_submit(request: Request, session: Session = Depends(get_db)) 
         validate_credentials(username, password, confirm)
         if session.scalar(select(UserAccount.id).where(UserAccount.username == username)) is not None:
             raise ValidationError("Username is already registered")
-        user = UserAccount(username=username, password_hash=hash_password(password))
+        user = UserAccount(username=username)
         session.add(user)
         session.flush()
+        encrypted = encrypt_password(password, app_settings)
+        session.add(
+            UserPassword(
+                user_id=user.id,
+                encoded_password=encrypted.encoded_password,
+                nonce=encrypted.nonce,
+                key_version=encrypted.key_version,
+            )
+        )
     except ValidationError as exc:
         flash(request, str(exc))
         return render(request, "register.html")

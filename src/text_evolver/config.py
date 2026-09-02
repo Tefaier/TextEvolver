@@ -1,7 +1,9 @@
+import base64
+import binascii
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -10,6 +12,12 @@ class AppSettings(BaseSettings):
 
     database_url: str = Field(min_length=1, validation_alias="DATABASE_URL")
     secret_key: str = Field(min_length=32, validation_alias="SECRET_KEY")
+    password_key_current: SecretStr = Field(validation_alias="PASSWORD_KEY_CURRENT")
+    password_key_current_version: int = Field(ge=1, validation_alias="PASSWORD_KEY_CURRENT_VERSION")
+    password_key_previous: SecretStr | None = Field(default=None, validation_alias="PASSWORD_KEY_PREVIOUS")
+    password_key_previous_version: int | None = Field(
+        default=None, ge=1, validation_alias="PASSWORD_KEY_PREVIOUS_VERSION"
+    )
     work_root: Path = Field(default=Path("var/work"), validation_alias="WORK_ROOT")
     temp_root: Path = Field(default=Path("var/tmp"), validation_alias="TEMP_ROOT")
     chrome_binary: str | None = Field(default=None, validation_alias="CHROME_BINARY")
@@ -29,6 +37,44 @@ class AppSettings(BaseSettings):
     @classmethod
     def resolve_path(cls, value: Path) -> Path:
         return value.expanduser().resolve()
+
+    @field_validator("password_key_previous", "password_key_previous_version", mode="before")
+    @classmethod
+    def empty_previous_key_values_are_none(cls, value: object) -> object:
+        return None if value == "" else value
+
+    @model_validator(mode="after")
+    def validate_password_keys(self) -> "AppSettings":
+        previous_values = (self.password_key_previous, self.password_key_previous_version)
+        if (previous_values[0] is None) != (previous_values[1] is None):
+            raise ValueError("PASSWORD_KEY_PREVIOUS and PASSWORD_KEY_PREVIOUS_VERSION must be set together")
+        if self.password_key_previous_version == self.password_key_current_version:
+            raise ValueError("Current and previous password key versions must differ")
+        self._decode_password_key(self.password_key_current, "PASSWORD_KEY_CURRENT")
+        if self.password_key_previous is not None:
+            self._decode_password_key(self.password_key_previous, "PASSWORD_KEY_PREVIOUS")
+        return self
+
+    @staticmethod
+    def _decode_password_key(value: SecretStr, name: str) -> bytes:
+        try:
+            decoded = base64.b64decode(value.get_secret_value(), validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError(f"{name} must be valid Base64") from exc
+        if len(decoded) != 32:
+            raise ValueError(f"{name} must decode to exactly 32 bytes for AES-256-GCM")
+        return decoded
+
+    @property
+    def current_password_key(self) -> bytes:
+        return self._decode_password_key(self.password_key_current, "PASSWORD_KEY_CURRENT")
+
+    def password_key_for_version(self, version: int) -> bytes | None:
+        if version == self.password_key_current_version:
+            return self.current_password_key
+        if version == self.password_key_previous_version and self.password_key_previous is not None:
+            return self._decode_password_key(self.password_key_previous, "PASSWORD_KEY_PREVIOUS")
+        return None
 
     def ensure_directories(self) -> None:
         for directory in (self.work_root, self.temp_root):

@@ -1,7 +1,7 @@
 from typing import Optional
 import datetime
 
-from sqlalchemy import Boolean, Enum, Float, ForeignKey, Index, Integer, String, TIMESTAMP, Text, text
+from sqlalchemy import Boolean, CheckConstraint, Enum, Float, ForeignKey, Index, Integer, LargeBinary, String, TIMESTAMP, Text, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
@@ -13,11 +13,11 @@ class UserAccount(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     username: Mapped[str] = mapped_column(String(64), nullable=False)
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     last_entry: Mapped[datetime.datetime] = mapped_column(TIMESTAMP, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
     setting_limit: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('5'))
 
     setting: Mapped[list['Setting']] = relationship('Setting', back_populates='owner')
+    user_password: Mapped['UserPassword'] = relationship('UserPassword', uselist=False, back_populates='user')
     processing_job: Mapped[list['ProcessingJob']] = relationship('ProcessingJob', back_populates='user')
 
 
@@ -43,6 +43,23 @@ class Setting(Base):
     phrase_conversion: Mapped[list['PhraseConversion']] = relationship('PhraseConversion', back_populates='setting')
     processing_job: Mapped[list['ProcessingJob']] = relationship('ProcessingJob', back_populates='setting')
     unit_conversion: Mapped[list['UnitConversion']] = relationship('UnitConversion', back_populates='setting')
+
+
+class UserPassword(Base):
+    __tablename__ = 'user_password'
+    __table_args__ = (
+        CheckConstraint('key_version >= 1'),
+        CheckConstraint('length(encoded_password) >= 16'),
+        CheckConstraint('length(nonce) = 12')
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('user_account.id'), nullable=False, unique=True)
+    encoded_password: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    nonce: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    key_version: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    user: Mapped['UserAccount'] = relationship('UserAccount', back_populates='user_password')
 
 
 class Fandom(Base):

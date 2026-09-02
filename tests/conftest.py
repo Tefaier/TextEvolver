@@ -10,6 +10,10 @@ from sqlalchemy.orm import Session
 
 os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///var/test-bootstrap.db")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-with-at-least-thirty-two-characters")
+os.environ.setdefault("PASSWORD_KEY_CURRENT", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+os.environ.setdefault("PASSWORD_KEY_CURRENT_VERSION", "2")
+os.environ.setdefault("PASSWORD_KEY_PREVIOUS", "ZmVkY2JhOTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTA=")
+os.environ.setdefault("PASSWORD_KEY_PREVIOUS_VERSION", "1")
 
 from text_evolver.config import AppSettings, get_application_settings  # noqa: E402
 from text_evolver.db.session import get_db  # noqa: E402
@@ -35,6 +39,10 @@ def app_settings(tmp_path: Path, database) -> AppSettings:
     settings = AppSettings(
         database_url=str(database.url),
         secret_key="test-secret-key-with-at-least-thirty-two-characters",
+        password_key_current="MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
+        password_key_current_version=2,
+        password_key_previous="ZmVkY2JhOTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTA=",
+        password_key_previous_version=1,
         work_root=tmp_path / "work",
         temp_root=tmp_path / "tmp",
         worker_min_free_memory_bytes=0,

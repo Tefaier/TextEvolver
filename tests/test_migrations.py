@@ -15,6 +15,7 @@ def test_sqlite_flyway_baseline_is_fresh_and_complete(tmp_path: Path):
     }
     assert tables == {
         "user_account",
+        "user_password",
         "setting",
         "fandom",
         "unit_conversion",
@@ -39,6 +40,7 @@ def test_sqlite_flyway_baseline_is_fresh_and_complete(tmp_path: Path):
 def test_postgresql_and_sqlite_baselines_declare_the_same_tables():
     expected = {
         "user_account",
+        "user_password",
         "setting",
         "fandom",
         "unit_conversion",
@@ -53,6 +55,8 @@ def test_postgresql_and_sqlite_baselines_declare_the_same_tables():
     postgresql_sql = Path("migrations/sql/postgresql/V1__initial_schema.sql").read_text(encoding="utf-8").upper()
     assert postgresql_sql.count("ID BIGSERIAL PRIMARY KEY") == len(expected)
     assert "REGEX BOOLEAN NOT NULL DEFAULT FALSE" in postgresql_sql
+    assert "ENCODED_PASSWORD BYTEA NOT NULL" in postgresql_sql
+    assert "NONCE BYTEA NOT NULL" in postgresql_sql
 
 
 def test_sqlalchemy_model_generation_is_deterministic(tmp_path: Path):
@@ -61,7 +65,10 @@ def test_sqlalchemy_model_generation_is_deterministic(tmp_path: Path):
     connection.executescript(Path("migrations/sql/sqlite/V1__initial_schema.sql").read_text(encoding="utf-8"))
     connection.close()
     outputs = [tmp_path / "models-one.py", tmp_path / "models-two.py"]
-    tables = "user_account,setting,fandom,unit_conversion,phrase_conversion,image_conversion,processing_job"
+    tables = (
+        "user_account,user_password,setting,fandom,unit_conversion,"
+        "phrase_conversion,image_conversion,processing_job"
+    )
     sqlacodegen = str(Path(sys.executable).with_name("sqlacodegen"))
     for output in outputs:
         subprocess.run(

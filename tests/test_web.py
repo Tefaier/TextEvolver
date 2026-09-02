@@ -3,11 +3,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from text_evolver.db.models import ProcessingJob, Setting, UserAccount
-from text_evolver.web.auth import verify_password
+from text_evolver.db.models import ProcessingJob, Setting, UserAccount, UserPassword
+from text_evolver.web.auth import encrypt_password, verify_password
 
 
-def test_registration_hashes_password(client: TestClient, database):
+def test_registration_encrypts_password(client: TestClient, database, app_settings):
     token = csrf_from(client.get("/register"))
     response = client.post(
         "/register",
@@ -18,8 +18,54 @@ def test_registration_hashes_password(client: TestClient, database):
     with Session(database) as session:
         user = session.scalar(select(UserAccount).where(UserAccount.username == "alice"))
         assert user is not None
-        assert user.password_hash != "not-plaintext"
-        assert verify_password("not-plaintext", user.password_hash)
+        stored = session.scalar(select(UserPassword).where(UserPassword.user_id == user.id))
+        assert stored is not None
+        assert stored.encoded_password != b"not-plaintext"
+        assert len(stored.nonce) == 12
+        assert stored.key_version == app_settings.password_key_current_version
+        assert verify_password("not-plaintext", stored, app_settings)
+        assert not verify_password("wrong-password", stored, app_settings)
+
+
+def test_login_rotates_password_encrypted_with_previous_key(client: TestClient, database, app_settings):
+    previous_settings = app_settings.model_copy(
+        update={
+            "password_key_current": app_settings.password_key_previous,
+            "password_key_current_version": app_settings.password_key_previous_version,
+            "password_key_previous": None,
+            "password_key_previous_version": None,
+        }
+    )
+    with Session(database) as session:
+        user = UserAccount(username="rotating-user")
+        session.add(user)
+        session.flush()
+        encrypted = encrypt_password("old-key-password", previous_settings)
+        stored = UserPassword(
+            user_id=user.id,
+            encoded_password=encrypted.encoded_password,
+            nonce=encrypted.nonce,
+            key_version=encrypted.key_version,
+        )
+        session.add(stored)
+        session.commit()
+        user_id = user.id
+        old_nonce = stored.nonce
+
+    token = csrf_from(client.get("/login"))
+    response = client.post(
+        "/login",
+        data={"csrf_token": token, "username": "rotating-user", "password": "old-key-password"},
+    )
+
+    assert response.status_code == 200
+    assert "My settings" in response.text
+    with Session(database) as session:
+        stored = session.scalar(select(UserPassword).where(UserPassword.user_id == user_id))
+        assert stored is not None
+        assert stored.key_version == app_settings.password_key_current_version
+        assert stored.nonce != old_nonce
+        assert verify_password("old-key-password", stored, app_settings)
 
 
 def test_csrf_is_required_for_mutations(registered_client: TestClient):

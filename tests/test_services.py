@@ -112,7 +112,7 @@ def test_create_job_lock_is_skipped_for_sqlite():
 
 def test_update_setting_preserves_unchanged_rows(database, app_settings):
     with Session(database) as session:
-        user = UserAccount(username="owner", password_hash="hash")
+        user = UserAccount(username="owner")
         session.add(user)
         session.flush()
         setting = Setting(owner_id=user.id, name="Conversions")
@@ -266,7 +266,7 @@ def test_update_setting_preserves_unchanged_rows(database, app_settings):
 
 def test_update_setting_rejects_invalid_phrase_regex(database, app_settings):
     with Session(database) as session:
-        user = UserAccount(username="owner", password_hash="hash")
+        user = UserAccount(username="owner")
         session.add(user)
         session.flush()
         setting = Setting(owner_id=user.id, name="Conversions")
@@ -294,7 +294,7 @@ def test_update_setting_rejects_invalid_phrase_regex(database, app_settings):
 
 def test_update_setting_forces_regex_false_for_non_direct_phrase(database, app_settings):
     with Session(database) as session:
-        user = UserAccount(username="owner", password_hash="hash")
+        user = UserAccount(username="owner")
         session.add(user)
         session.flush()
         setting = Setting(owner_id=user.id, name="Conversions")

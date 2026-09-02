@@ -1,21 +1,56 @@
 import hmac
 import secrets
+from dataclasses import dataclass
 
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from fastapi import HTTPException, Request, status
-from pwdlib import PasswordHash
 from sqlalchemy.orm import Session
 
-from text_evolver.db.models import UserAccount
+from text_evolver.config import AppSettings
+from text_evolver.db.models import UserAccount, UserPassword
 
-password_hash = PasswordHash.recommended()
-
-
-def hash_password(password: str) -> str:
-    return password_hash.hash(password)
+PASSWORD_NONCE_BYTES = 12
 
 
-def verify_password(password: str, encoded: str) -> bool:
-    return password_hash.verify(password, encoded)
+@dataclass(frozen=True, slots=True)
+class EncryptedPassword:
+    encoded_password: bytes
+    nonce: bytes
+    key_version: int
+
+
+def encrypt_password(password: str, settings: AppSettings) -> EncryptedPassword:
+    key_version = settings.password_key_current_version
+    nonce = secrets.token_bytes(PASSWORD_NONCE_BYTES)
+    encoded_password = AESGCM(settings.current_password_key).encrypt(
+        nonce,
+        password.encode("utf-8"),
+        None
+    )
+    return EncryptedPassword(encoded_password=encoded_password, nonce=nonce, key_version=key_version)
+
+
+def verify_password(password: str, stored: UserPassword, settings: AppSettings) -> bool:
+    key = settings.password_key_for_version(stored.key_version)
+    if key is None or len(stored.nonce) != PASSWORD_NONCE_BYTES:
+        return False
+    try:
+        decrypted = AESGCM(key).decrypt(
+            stored.nonce,
+            stored.encoded_password,
+            None,
+        )
+    except (InvalidTag, ValueError):
+        return False
+    return hmac.compare_digest(decrypted, password.encode("utf-8"))
+
+
+def store_encrypted_password(stored: UserPassword, password: str, settings: AppSettings) -> None:
+    encrypted = encrypt_password(password, settings)
+    stored.encoded_password = encrypted.encoded_password
+    stored.nonce = encrypted.nonce
+    stored.key_version = encrypted.key_version
 
 
 def login(request: Request, user: UserAccount) -> None:
@@ -72,4 +107,3 @@ def flash(request: Request, message: str, category: str = "error") -> None:
 
 def pop_flashes(request: Request) -> list[tuple[str, str]]:
     return [tuple(item) for item in request.session.pop("flash_messages", [])]
-

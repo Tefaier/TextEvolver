@@ -9,20 +9,23 @@
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-ho+j7jyWK8fNQe+A12Hb8AhRq26LrZ/JpcUGGOn+Y7RsweNrtN/tE3MoK7ZeZDyx" crossorigin="anonymous"></script>
         <script src='https://kit.fontawesome.com/e0083df4cf.js' crossorigin="anonymous"></script>
         <script>
-            $.ajaxSetup({headers: {'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content}});
 	        var Download_files = function(but){
                 var text = but.firstChild.data;
                 const values = text.split(" / ");
                 but.firstChild.data = "0 / " + String(Number(values[1]) - Number(values[0]));
-                $.post('/download_files', function(data) {
-                  //do nothing
+                $.ajax({
+                    url: '/download_files',
+                    type: 'POST',
+                    headers: {'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content}
                 });
                 return false;
 	        }
 	        var Terminate_process = function(but){
-	            $.post('/terminate', function(data) {
-                  //do nothing
-                });
+	            $.ajax({
+	                url: '/terminate',
+	                type: 'POST',
+	                headers: {'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content}
+	            });
 	        }
 	        function Files_reset(but){
 	            var text = but.firstChild.data;
@@ -68,8 +71,10 @@
                 }
 	        }
 	        var Delete_set = function(but){
-                $.post('/delete_set' + '/' + but.name, function(data) {
-                  //do nothing
+                $.ajax({
+                    url: '/delete_set' + '/' + but.name,
+                    type: 'POST',
+                    headers: {'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content}
                 });
                 const row = document.getElementById(but.name);
                 if (row != null){

@@ -25,7 +25,7 @@ def install_worker_database(monkeypatch, database, app_settings):
 
 def create_queued_job(database) -> int:
     with Session(database) as session:
-        user = UserAccount(username="worker-user", password_hash="unused")
+        user = UserAccount(username="worker-user")
         session.add(user)
         session.flush()
         setting = Setting(owner_id=user.id, name="worker-setting")

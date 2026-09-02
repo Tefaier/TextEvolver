@@ -21,6 +21,8 @@ cp .env.example .env
 ```
 
 Set a random `SECRET_KEY`, database credentials, and `DATABASE_URL` in `.env`.
+Generate the initial AES-256-GCM password key with `openssl rand -base64 32`,
+store it as `PASSWORD_KEY_CURRENT`, and set `PASSWORD_KEY_CURRENT_VERSION=1`.
 The application has no SQLite runtime fallback. Start the web process and the
 worker separately:
 
@@ -130,6 +132,10 @@ in deterministic tests.
 | --- | --- |
 | `DATABASE_URL` | SQLAlchemy psycopg URL; Compose points it at PgBouncer |
 | `SECRET_KEY` | Signs session cookies; minimum 32 characters |
+| `PASSWORD_KEY_CURRENT` | Base64-encoded 32-byte AES-256-GCM key used for new password encryption |
+| `PASSWORD_KEY_CURRENT_VERSION` | Positive integer stored with passwords encrypted by the current key |
+| `PASSWORD_KEY_PREVIOUS` | Optional previous Base64-encoded 32-byte key accepted during rotation |
+| `PASSWORD_KEY_PREVIOUS_VERSION` | Previous key's version; must be set together with its key |
 | `WORK_ROOT` | Shared job input/output directory |
 | `TEMP_ROOT` | Temporary processing directory |
 | `CHROME_BINARY` | Optional Chromium executable override |
@@ -138,3 +144,17 @@ in deterministic tests.
 | `WORKER_POLL_SECONDS` | Queue polling interval |
 | `WORKER_CONCURRENCY` | Maximum jobs processed concurrently by the worker (1-64) |
 | `WORKER_MIN_FREE_MEMORY_BYTES` | Memory threshold before claiming jobs |
+
+### Password-key rotation
+
+Passwords are stored in `user_password` as AES-256-GCM ciphertext with a fresh
+12-byte nonce and the key version; the authentication tag is part of the
+ciphertext. Keys remain only in application configuration and must never be
+committed or logged.
+
+To rotate keys, move the existing current key and version to
+`PASSWORD_KEY_PREVIOUS` and `PASSWORD_KEY_PREVIOUS_VERSION`, generate a new
+current key, and increment the current version. A successful login using the
+previous key re-encrypts that user's password with the current key. Keep the
+previous key configured until every existing password has been re-encrypted;
+records using unavailable key versions cannot authenticate.

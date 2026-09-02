@@ -1,9 +1,16 @@
 CREATE TABLE user_account (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     username VARCHAR(64) NOT NULL UNIQUE,
-    password_hash VARCHAR(255) NOT NULL,
     last_entry TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     setting_limit INTEGER NOT NULL DEFAULT 5
+);
+
+CREATE TABLE user_password (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL UNIQUE REFERENCES user_account(id) ON DELETE CASCADE,
+    encoded_password BLOB NOT NULL CHECK (length(encoded_password) >= 16),
+    nonce BLOB NOT NULL CHECK (length(nonce) = 12),
+    key_version INTEGER NOT NULL CHECK (key_version >= 1)
 );
 
 CREATE TABLE setting (

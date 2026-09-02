@@ -1,9 +1,16 @@
 CREATE TABLE user_account (
     id BIGSERIAL PRIMARY KEY,
     username VARCHAR(64) NOT NULL UNIQUE,
-    password_hash VARCHAR(255) NOT NULL,
     last_entry TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     setting_limit INTEGER NOT NULL DEFAULT 5
+);
+
+CREATE TABLE user_password (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL UNIQUE REFERENCES user_account(id) ON DELETE CASCADE,
+    encoded_password BYTEA NOT NULL CHECK (octet_length(encoded_password) >= 16),
+    nonce BYTEA NOT NULL CHECK (octet_length(nonce) = 12),
+    key_version INTEGER NOT NULL CHECK (key_version >= 1)
 );
 
 CREATE TABLE setting (
