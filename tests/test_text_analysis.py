@@ -2,7 +2,6 @@ import pytest
 
 from text_evolver.processing import text_analysis
 from text_evolver.processing.text_analysis import (
-    NUMBER_WORDS,
     NumberSpan,
     ReplaceRules,
     _text2int,

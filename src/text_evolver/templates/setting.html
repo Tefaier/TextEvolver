@@ -110,7 +110,7 @@
                 </div>
                 <div class="data_info">
                     <label>Direct change</label>
-                    <select name="phrase_direct">
+                    <select name="phrase_direct" onchange="Sync_phrase_regex(this)">
                         <option value="True">Yes</option>
                         <option value="False">No</option>
                     </select>
@@ -120,6 +120,14 @@
                     <select name="phrase_mutations">
                         <option value="True">Yes</option>
                         <option value="False">No</option>
+                    </select>
+                </div>
+                <div class="data_info">
+                    <label>Regular expression</label>
+                    <input type="hidden" name="phrase_regex" value="False" data-phrase-regex-fallback disabled>
+                    <select name="phrase_regex" onchange="Sync_phrase_regex(this)">
+                        <option value="True">Yes</option>
+                        <option value="False" selected>No</option>
                     </select>
                 </div>
             </div>
@@ -445,7 +453,7 @@
                         </div>
                         <div class="data_info"> {# phrase_conv.direct #}
                             <label>Direct change</label>
-                            <select name="phrase_direct">
+                            <select name="phrase_direct" onchange="Sync_phrase_regex(this)">
                                 {% if phrase_conv.direct %}
                                 <option value="True" selected>Yes</option>
                                 <option value="False">No</option>
@@ -459,6 +467,21 @@
                             <label>Accept suffix (s/es/'/'s)</label>
                             <select name="phrase_mutations">
                                 {% if phrase_conv.mutations %}
+                                <option value="True" selected>Yes</option>
+                                <option value="False">No</option>
+                                {% else %}
+                                <option value="True">Yes</option>
+                                <option value="False" selected>No</option>
+                                {% endif %}
+                            </select>
+                        </div>
+                        <div class="data_info"> {# phrase_conv.regex #}
+                            <label>Regular expression</label>
+                            <input type="hidden" name="phrase_regex" value="False" data-phrase-regex-fallback
+                                   {% if phrase_conv.direct %}disabled{% endif %}>
+                            <select name="phrase_regex" onchange="Sync_phrase_regex(this)"
+                                    {% if not phrase_conv.direct %}disabled{% endif %}>
+                                {% if phrase_conv.direct and phrase_conv.regex %}
                                 <option value="True" selected>Yes</option>
                                 <option value="False">No</option>
                                 {% else %}

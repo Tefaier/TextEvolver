@@ -38,6 +38,9 @@ def test_create_setting_and_enqueue_upload(registered_client: TestClient, databa
         setting_id = setting.id
 
     page = registered_client.get(f"/setting/{setting_id}")
+    assert 'name="phrase_regex"' in page.text
+    assert 'onchange="Sync_phrase_regex(this)"' in page.text
+    assert "data-phrase-regex-fallback" in page.text
     token = csrf_from(page)
     response = registered_client.post(
         f"/setting/{setting_id}",

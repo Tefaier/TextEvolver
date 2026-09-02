@@ -25,6 +25,11 @@ def test_sqlite_flyway_baseline_is_fresh_and_complete(tmp_path: Path):
     indexes = {row[0] for row in database.execute("SELECT name FROM sqlite_master WHERE type = 'index'")}
     assert "ux_processing_job_active_user" in indexes
     assert database.execute("PRAGMA foreign_key_list(setting)").fetchone() is not None
+    phrase_columns = {
+        column[1]: column for column in database.execute("PRAGMA table_info(phrase_conversion)")
+    }
+    assert phrase_columns["regex"][3] == 1
+    assert phrase_columns["regex"][4].upper() == "FALSE"
     for table in tables:
         id_column = next(column for column in database.execute(f"PRAGMA table_info({table})") if column[1] == "id")
         assert id_column[3] == 1
@@ -47,6 +52,7 @@ def test_postgresql_and_sqlite_baselines_declare_the_same_tables():
 
     postgresql_sql = Path("migrations/sql/postgresql/V1__initial_schema.sql").read_text(encoding="utf-8").upper()
     assert postgresql_sql.count("ID BIGSERIAL PRIMARY KEY") == len(expected)
+    assert "REGEX BOOLEAN NOT NULL DEFAULT FALSE" in postgresql_sql
 
 
 def test_sqlalchemy_model_generation_is_deterministic(tmp_path: Path):

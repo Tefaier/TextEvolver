@@ -50,6 +50,7 @@ class ReplaceRules:
     replace_with: str
     lookup_length: int
     mutations: bool = False
+    regex: bool = False
     units: float | None = None
     is_feet: bool = False
     can_be_word: bool | None = None
@@ -389,7 +390,10 @@ def find_in_clean(
     for word in clean_words:
         word_starts.append(next_word_start)
         next_word_start += len(word) + 1
-    lookup_pattern = re.compile(to_find, flags=re.IGNORECASE)
+    lookup_pattern = re.compile(
+        to_find if replace_rules.regex else re.escape(to_find),
+        flags=re.IGNORECASE,
+    )
 
     i = 0
     while i < len(clean_words) + 1 - words_num:

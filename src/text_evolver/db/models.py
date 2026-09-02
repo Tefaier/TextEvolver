@@ -91,6 +91,7 @@ class PhraseConversion(Base):
     phrase_to: Mapped[str] = mapped_column(String(64), nullable=False)
     direct: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('FALSE'))
     mutations: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('FALSE'))
+    regex: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('FALSE'))
 
     setting: Mapped['Setting'] = relationship('Setting', back_populates='phrase_conversion')
 

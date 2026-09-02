@@ -170,6 +170,59 @@ def test_direct_replacement_crosses_markup_parts(tmp_path: Path):
     )
 
 
+def test_direct_phrase_uses_regex_only_when_enabled(tmp_path: Path):
+    origin, output, source = run_one(tmp_path, "regex.html")
+    source.write_text("<html><body><p>Item 123 and a+b and aaab.</p></body></html>", encoding="utf-8")
+    regex_configuration = configuration(
+        phrases=(
+            {
+                "phrase_from": r"\d+",
+                "phrase_to": "#",
+                "direct": True,
+                "mutations": False,
+                "regex": True,
+            },
+            {
+                "phrase_from": "a+b",
+                "phrase_to": "literal",
+                "direct": True,
+                "mutations": False,
+                "regex": False,
+            },
+        )
+    )
+
+    process_files(regex_configuration, origin, output)
+
+    assert (output / source.name).read_text(encoding="utf-8") == (
+        "<html><body><p>Item # and literal and aaab.</p></body></html>"
+    )
+
+
+def test_non_direct_phrase_ignores_regex_flag(tmp_path: Path):
+    origin, output, source = run_one(tmp_path, "word-regex.html")
+    source.write_text("<html><body><p>A colour and color.</p></body></html>", encoding="utf-8")
+    regex_configuration = configuration(
+        phrases=(
+            {
+                "phrase_from": "colou?r",
+                "phrase_to": "shade",
+                "direct": False,
+                "mutations": False,
+                "regex": True,
+            },
+        )
+    )
+
+    process_files(regex_configuration, origin, output)
+
+    assert (output / source.name).read_text(encoding="utf-8") == (
+        "<html><body><p>A colour and color.</p></body></html>"
+    )
+    process_unit = processor.ProcessUnit(regex_configuration)
+    assert process_unit.word_conversions["colou?r"].regex is False
+
+
 def test_non_direct_replacement_updates_whole_phrase(tmp_path: Path):
     origin, output, source = run_one(tmp_path, "phrase.html")
     source.write_text("<html><body><p>An old-road.</p></body></html>", encoding="utf-8")
@@ -219,21 +272,21 @@ def test_conversion_rules_are_built_when_process_unit_is_configured():
         )
     )
 
-    assert process_unit.units_list["miles"]["replace_rules"] == ReplaceRules(
+    assert process_unit.units_list["miles"] == ReplaceRules(
         replace_with="kilometers",
         lookup_length=1,
         units=1.6,
         can_be_word=True,
     )
-    assert process_unit.word_conversions["old road"]["replace_rules"] == ReplaceRules(
+    assert process_unit.word_conversions["old road"] == ReplaceRules(
         replace_with="new path",
         lookup_length=2,
         mutations=True,
     )
-    assert process_unit.units_list["square miles"]["replace_rules"].lookup_length == 2
+    assert process_unit.units_list["square miles"].lookup_length == 2
 
-    assert set(process_unit.units_list["miles"]) == {"replace_rules"}
-    assert set(process_unit.word_conversions["old road"]) == {"replace_rules"}
+    assert process_unit.units_list["miles"] is not None
+    assert process_unit.word_conversions["old road"] is not None
 
 
 def test_feet_rule_converts_values_with_and_without_unit_word():
@@ -241,7 +294,7 @@ def test_feet_rule_converts_values_with_and_without_unit_word():
 
     assert process_unit.text_alteration("5'11 feet") == "179.3 cm"
     assert process_unit.text_alteration("Height 5'11 and 5’11.") == "Height 179.3 cm and 179.3 cm."
-    assert process_unit.units_list["feet"]["replace_rules"].is_feet is True
+    assert process_unit.units_list["feet"].is_feet is True
 
 
 def test_non_feet_rule_does_not_parse_feet_formatted_digits():
@@ -267,7 +320,7 @@ def test_non_feet_rule_does_not_parse_feet_formatted_digits():
     assert process_unit.text_alteration("This is a random ordinary word miles") == (
         "This is a random ordinary word miles"
     )
-    assert process_unit.units_list["miles"]["replace_rules"].is_feet is False
+    assert process_unit.units_list["miles"].is_feet is False
 
 
 def test_configured_feet_rule_converts_standalone_values_using_its_own_settings():
@@ -308,6 +361,27 @@ def test_clean_empty_removes_whole_markup_block(tmp_path: Path):
     source.write_text("<html><body><p><strong>---</strong></p><p>keep</p></body></html>", encoding="utf-8")
 
     process_files(configuration(clean_empty=True, phrases=()), origin, output)
+
+    assert (output / source.name).read_text(encoding="utf-8") == "<html><body><p>keep</p></body></html>"
+
+
+def test_clean_empty_removes_block_that_becomes_empty_after_replacement(tmp_path: Path):
+    origin, output, source = run_one(tmp_path, "clean-after-replacement.html")
+    source.write_text("<html><body><p>remove 123</p><p>keep</p></body></html>", encoding="utf-8")
+    remove_configuration = configuration(
+        clean_empty=True,
+        phrases=(
+            {
+                "phrase_from": r"remove \d+",
+                "phrase_to": "",
+                "direct": True,
+                "mutations": False,
+                "regex": True,
+            },
+        ),
+    )
+
+    process_files(remove_configuration, origin, output)
 
     assert (output / source.name).read_text(encoding="utf-8") == "<html><body><p>keep</p></body></html>"
 

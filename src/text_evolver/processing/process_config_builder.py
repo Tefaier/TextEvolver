@@ -72,6 +72,7 @@ def load_processing_configuration(
                 "phrase_to": value.phrase_to,
                 "direct": value.direct,
                 "mutations": value.mutations,
+                "regex": value.regex,
             }
             for value in phrases
         ),
@@ -115,27 +116,23 @@ def configure_process_unit(unit: object, configuration: ProcessingConfiguration)
 
     for value in configuration.units:
         phrase_from = str(value["phrase_from"])
-        unit.units_list[value["phrase_from"]] = {
-            "replace_rules": ReplaceRules(
-                replace_with=str(value["phrase_to"]),
-                lookup_length=len(phrase_from.split()),
-                units=float(value["conversion"]),
-                is_feet=configuration.expect_feet and phrase_from.casefold() == "feet",
-                can_be_word=bool(value["can_be_word"]),
-            ),
-        }
+        unit.units_list[value["phrase_from"]] = ReplaceRules(
+            replace_with=str(value["phrase_to"]),
+            lookup_length=len(phrase_from.split()),
+            units=float(value["conversion"]),
+            is_feet=configuration.expect_feet and phrase_from.casefold() == "feet",
+            can_be_word=bool(value["can_be_word"]),
+        )
     if configuration.expect_feet and not any(
         str(phrase_from).casefold() == "feet" for phrase_from in unit.units_list
     ):
-        unit.units_list["feet"] = {
-            "replace_rules": ReplaceRules(
-                replace_with="cm",
-                lookup_length=1,
-                units=30.3,
-                is_feet=True,
-                can_be_word=True,
-            ),
-        }
+        unit.units_list["feet"] = ReplaceRules(
+            replace_with="cm",
+            lookup_length=1,
+            units=30.3,
+            is_feet=True,
+            can_be_word=True,
+        )
     for value in configuration.images:
         binaries = str(value["images"]).split("*")
         if value["phrase"] in unit.pokemons_list:
@@ -157,17 +154,17 @@ def configure_process_unit(unit: object, configuration: ProcessingConfiguration)
                 "explanation": value["explanation"],
             }
     for value in configuration.phrases:
+        phrase_from = str(value["phrase_from"])
+        replace_rules = ReplaceRules(
+            replace_with=str(value["phrase_to"]),
+            lookup_length=len(phrase_from.split()),
+            mutations=bool(value["mutations"]),
+            regex=bool(value["direct"] and value.get("regex", False)),
+        )
         if value["direct"]:
-            unit.direct_conversions[value["phrase_from"]] = value["phrase_to"]
+            unit.direct_conversions[value["phrase_from"]] = replace_rules
         else:
-            phrase_from = str(value["phrase_from"])
-            unit.word_conversions[value["phrase_from"]] = {
-                "replace_rules": ReplaceRules(
-                    replace_with=str(value["phrase_to"]),
-                    lookup_length=len(phrase_from.split()),
-                    mutations=bool(value["mutations"]),
-                ),
-            }
+            unit.word_conversions[value["phrase_from"]] = replace_rules
 
 
 def _load_pokemons(unit: object, pokemons: tuple[PokemonRecord, ...], default_separation: int) -> None:

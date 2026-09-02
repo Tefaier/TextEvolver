@@ -46,7 +46,8 @@ CREATE TABLE phrase_conversion (
     phrase_from VARCHAR(64) NOT NULL,
     phrase_to VARCHAR(64) NOT NULL,
     direct BOOLEAN NOT NULL DEFAULT FALSE,
-    mutations BOOLEAN NOT NULL DEFAULT FALSE
+    mutations BOOLEAN NOT NULL DEFAULT FALSE,
+    regex BOOLEAN NOT NULL DEFAULT FALSE
 );
 CREATE INDEX ix_phrase_conversion_setting_id ON phrase_conversion(setting_id);
 

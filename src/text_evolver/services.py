@@ -194,6 +194,7 @@ def copy_setting(session: Session, source_id: int, user_id: int) -> Setting:
                 phrase_to=value.phrase_to,
                 direct=value.direct,
                 mutations=value.mutations,
+                regex=value.direct and value.regex,
             )
             for value in source.phrase_convs
         ]
@@ -467,19 +468,29 @@ async def update_setting_from_form(
                 }
             )
 
-    phrase_from, phrase_to, direct, mutations = _aligned(
-        form, ["phrase_from", "phrase_to", "phrase_direct", "phrase_mutations"]
+    phrase_from, phrase_to, direct, mutations, regex_values = _aligned(
+        form, ["phrase_from", "phrase_to", "phrase_direct", "phrase_mutations", "phrase_regex"]
     )
     submitted_phrases: list[dict[str, Any]] = []
     for index, source in enumerate(phrase_from):
         source = str(source).strip()
         if source:
+            direct_value = parse_bool(direct[index], "phrase_direct")
+            regex_value = direct_value and parse_bool(regex_values[index], "phrase_regex")
+            replacement = str(phrase_to[index])
+            if regex_value:
+                try:
+                    pattern = re.compile(source)
+                    pattern.sub(replacement, "")
+                except re.error as error:
+                    raise ValidationError(f"Invalid phrase regular expression: {error}") from error
             submitted_phrases.append(
                 {
                     "phrase_from": source,
-                    "phrase_to": str(phrase_to[index]),
-                    "direct": parse_bool(direct[index], "phrase_direct"),
+                    "phrase_to": replacement,
+                    "direct": direct_value,
                     "mutations": parse_bool(mutations[index], "phrase_mutations"),
+                    "regex": regex_value,
                 }
             )
 
@@ -508,7 +519,7 @@ async def update_setting_from_form(
             _calculate_row_changes(
                 existing_phrases,
                 submitted_phrases,
-                ("phrase_from", "phrase_to", "direct", "mutations"),
+                ("phrase_from", "phrase_to", "direct", "mutations", "regex"),
             ),
         ),
         (

@@ -93,19 +93,22 @@ class ProcessUnit:
     def direct_replace(self, string: str) -> str:
         if self.settings["convert to utf"]:
             string = convert_utf8_symbols(string)
-        for source, replacement in self.direct_conversions.items():
-            string = string.replace(source, replacement)
+        for source, replace_rules in self.direct_conversions.items():
+            if replace_rules.regex:
+                string = re.sub(source, replace_rules.replace_with, string)
+            else:
+                string = string.replace(source, replace_rules.replace_with)
         return string
 
     def text_alteration(self, text: str) -> str:
         words = text.split(" ")
         clean_text = text_cleaner(text, self.settings).split(" ")
 
-        for phrase, item in self.units_list.items():
+        for phrase, replace_rules in self.units_list.items():
             results = find_in_clean(
                 clean_text,
                 phrase,
-                item["replace_rules"],
+                replace_rules,
             )
             if results["found"]:
                 try:
@@ -114,11 +117,11 @@ class ProcessUnit:
                     clean_text = text_cleaner(text, self.settings).split(" ")
                 except ValueError:
                     pass
-        for phrase, item in self.word_conversions.items():
+        for phrase, replace_rules in self.word_conversions.items():
             results = find_in_clean(
                 clean_text,
                 phrase,
-                item["replace_rules"],
+                replace_rules,
             )
             if results["found"]:
                 try:
@@ -134,17 +137,17 @@ class ProcessUnit:
         while (part := document.read_part()) is not None:
             if part.starts_block:
                 block_parts = []
-                if self.settings["clean empty"] and not string_with_meaning(part.block_text):
-                    document.remove_last_block()
-                    continue
-                self.images_locate(part.block_text, document)
             block_parts.append(part.text)
             if not part.ends_block:
                 continue
 
             text = self.direct_replace(part.block_text)
             transformed_text = text if string_empty(text) else self.text_alteration(text)
+            if self.settings["clean empty"] and not string_with_meaning(transformed_text):
+                document.remove_last_block()
+                continue
             self.word_counter += len(text_cleaner(transformed_text, self.settings).split())
+            self.images_locate(transformed_text, document)
             document.overwrite_last_block_parts(redistribute_transformed_text(block_parts, transformed_text))
         return document.save()
 

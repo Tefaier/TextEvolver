@@ -146,6 +146,7 @@ def test_update_setting_preserves_unchanged_rows(database, app_settings):
             phrase_to="new",
             direct=True,
             mutations=False,
+            regex=False,
         )
         image = ImageConversion(
             setting_id=setting.id,
@@ -209,6 +210,7 @@ def test_update_setting_preserves_unchanged_rows(database, app_settings):
                 ("phrase_to", "new"),
                 ("phrase_direct", "True"),
                 ("phrase_mutations", "False"),
+                ("phrase_regex", "False"),
                 ("image_token", f"existing-{image.id}"),
                 ("image_phrase", "Pikachu"),
                 ("image_separation", "50"),
@@ -260,3 +262,63 @@ def test_update_setting_preserves_unchanged_rows(database, app_settings):
         assert units_by_source["foot"].id != changed_unit_id
         assert units_by_source["yard"].phrase_to == "yards"
         assert session.get(UnitConversion, changed_unit_id) is None
+
+
+def test_update_setting_rejects_invalid_phrase_regex(database, app_settings):
+    with Session(database) as session:
+        user = UserAccount(username="owner", password_hash="hash")
+        session.add(user)
+        session.flush()
+        setting = Setting(owner_id=user.id, name="Conversions")
+        session.add(setting)
+        session.flush()
+        form = FormData(
+            [
+                ("set_name", "Conversions"),
+                ("set_public", "False"),
+                ("set_empty", "False"),
+                ("set_utf", "False"),
+                ("set_coma_sep", "False"),
+                ("set_expect_feet", "False"),
+                ("phrase_from", "["),
+                ("phrase_to", "replacement"),
+                ("phrase_direct", "True"),
+                ("phrase_mutations", "False"),
+                ("phrase_regex", "True"),
+            ]
+        )
+
+        with pytest.raises(ValidationError, match="Invalid phrase regular expression"):
+            asyncio.run(update_setting_from_form(session, setting.id, form, app_settings))
+
+
+def test_update_setting_forces_regex_false_for_non_direct_phrase(database, app_settings):
+    with Session(database) as session:
+        user = UserAccount(username="owner", password_hash="hash")
+        session.add(user)
+        session.flush()
+        setting = Setting(owner_id=user.id, name="Conversions")
+        session.add(setting)
+        session.flush()
+        form = FormData(
+            [
+                ("set_name", "Conversions"),
+                ("set_public", "False"),
+                ("set_empty", "False"),
+                ("set_utf", "False"),
+                ("set_coma_sep", "False"),
+                ("set_expect_feet", "False"),
+                ("phrase_from", "["),
+                ("phrase_to", "replacement"),
+                ("phrase_direct", "False"),
+                ("phrase_mutations", "False"),
+                ("phrase_regex", "True"),
+            ]
+        )
+
+        asyncio.run(update_setting_from_form(session, setting.id, form, app_settings))
+
+        phrase = session.scalar(select(PhraseConversion).where(PhraseConversion.setting_id == setting.id))
+        assert phrase is not None
+        assert phrase.direct is False
+        assert phrase.regex is False

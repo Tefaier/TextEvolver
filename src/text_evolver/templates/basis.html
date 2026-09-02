@@ -125,6 +125,24 @@
                     row_p.parentNode.insertBefore(newHr, row_p);
                 }
 	        }
+	        function Sync_phrase_regex(element){
+                const row = element.closest(".row");
+                if (row == null){
+                    return;
+                }
+                const direct = row.querySelector("[name='phrase_direct']");
+                const regex = row.querySelector("select[name='phrase_regex']");
+                const regexFallback = row.querySelector("[data-phrase-regex-fallback]");
+                if (direct == null || regex == null || regexFallback == null){
+                    return;
+                }
+                const directEnabled = direct.value == "True";
+                if (!directEnabled){
+                    regex.value = "False";
+                }
+	            regex.disabled = !directEnabled;
+	            regexFallback.disabled = directEnabled;
+	        }
 	        function Activate_run(inp){
                 const run_1 = document.querySelector("[id='RunS']");
                 if (run_1 != null && run_1.value=="Save and run"){
