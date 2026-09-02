@@ -19,6 +19,7 @@ python3.12 -m venv .venv
 ```bash
 ./migrations/apply.sh
 ./migrations/generate_models.sh
+.venv/bin/python migrations/upgrade_cipher_version.py --batch-size 100
 podman build -t text-evolver:local .
 docker compose up --build
 ```

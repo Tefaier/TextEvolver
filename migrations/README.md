@@ -35,9 +35,29 @@ diff; do not add application behavior to that file.
 `FLYWAY_COMMAND` and `SQLACODEGEN_COMMAND` may point to non-default executable
 names or absolute executable paths.
 
+## Upgrade the password cipher key version
+
+Configure both the current and previous password keys in the root application
+`.env`, then run from the repository root:
+
+```bash
+.venv/bin/python migrations/upgrade_cipher_version.py --batch-size 100
+```
+
+The script connects through the application's `DATABASE_URL`. Each batch locks
+rows using the configured previous key version, decrypts them with that key,
+re-encrypts them with the current key and a new unique nonce, and commits the
+batch. Completed batches remain committed if a later batch fails, so rerunning
+the same command resumes the upgrade. Rows already using the current version
+are not changed.
+
+Keep `PASSWORD_KEY_PREVIOUS` and `PASSWORD_KEY_PREVIOUS_VERSION` configured
+until the script reports that no more records were upgraded. Do not put these
+application encryption keys in `migrations/.env`; that file is only for the
+Flyway connection.
+
 ## Add a migration
 
 Add the same version and description under both `sql/postgresql/` and
 `sql/sqlite/`, using dialect-specific syntax only where necessary. Then apply
 both paths and regenerate the models. Never edit an already-applied migration.
-

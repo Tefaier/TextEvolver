@@ -159,3 +159,13 @@ current key, and increment the current version. A successful login using the
 previous key continues using that stored key version. Keep the previous key
 configured while any password records use it; records using unavailable key
 versions cannot authenticate.
+
+Upgrade all previous-version records in committed batches before removing the
+previous key:
+
+```bash
+.venv/bin/python migrations/upgrade_cipher_version.py --batch-size 100
+```
+
+The command is resumable and leaves records already using the current version
+unchanged. See [migrations/README.md](migrations/README.md) for details.
