@@ -1,6 +1,6 @@
 CREATE TABLE user_account (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-    username VARCHAR(64) NOT NULL UNIQUE,
+    username TEXT NOT NULL UNIQUE,
     last_entry TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     setting_limit INTEGER NOT NULL DEFAULT 5
 );
@@ -17,7 +17,7 @@ CREATE TABLE user_password (
 CREATE TABLE setting (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     owner_id INTEGER NOT NULL REFERENCES user_account(id) ON DELETE CASCADE,
-    name VARCHAR(64) NOT NULL,
+    name TEXT NOT NULL,
     public BOOLEAN NOT NULL DEFAULT FALSE,
     clean_empty BOOLEAN NOT NULL DEFAULT FALSE,
     convert_to_utf BOOLEAN NOT NULL DEFAULT FALSE,
@@ -30,7 +30,7 @@ CREATE INDEX ix_setting_public_name ON setting(public, name);
 CREATE TABLE fandom (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     setting_id INTEGER NOT NULL REFERENCES setting(id) ON DELETE CASCADE,
-    name VARCHAR(64) NOT NULL,
+    name TEXT NOT NULL,
     active BOOLEAN NOT NULL DEFAULT FALSE,
     separation INTEGER NOT NULL DEFAULT 1,
     support_value_1 BOOLEAN NOT NULL DEFAULT FALSE,
@@ -41,8 +41,8 @@ CREATE INDEX ix_fandom_setting_id ON fandom(setting_id);
 CREATE TABLE unit_conversion (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     setting_id INTEGER NOT NULL REFERENCES setting(id) ON DELETE CASCADE,
-    phrase_from VARCHAR(64) NOT NULL,
-    phrase_to VARCHAR(64) NOT NULL,
+    phrase_from TEXT NOT NULL,
+    phrase_to TEXT NOT NULL,
     conversion FLOAT NOT NULL,
     can_be_word BOOLEAN NOT NULL DEFAULT FALSE
 );
@@ -51,8 +51,8 @@ CREATE INDEX ix_unit_conversion_setting_id ON unit_conversion(setting_id);
 CREATE TABLE phrase_conversion (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     setting_id INTEGER NOT NULL REFERENCES setting(id) ON DELETE CASCADE,
-    phrase_from VARCHAR(64) NOT NULL,
-    phrase_to VARCHAR(64) NOT NULL,
+    phrase_from TEXT NOT NULL,
+    phrase_to TEXT NOT NULL,
     direct BOOLEAN NOT NULL DEFAULT FALSE,
     mutations BOOLEAN NOT NULL DEFAULT FALSE,
     regex BOOLEAN NOT NULL DEFAULT FALSE
@@ -62,9 +62,9 @@ CREATE INDEX ix_phrase_conversion_setting_id ON phrase_conversion(setting_id);
 CREATE TABLE image_conversion (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     setting_id INTEGER NOT NULL REFERENCES setting(id) ON DELETE CASCADE,
-    phrase VARCHAR(64) NOT NULL,
+    phrase TEXT NOT NULL,
     separation INTEGER NOT NULL DEFAULT 1,
-    explanation VARCHAR(64) NOT NULL,
+    explanation TEXT NOT NULL,
     mutations BOOLEAN NOT NULL DEFAULT FALSE
 );
 CREATE INDEX ix_image_conversion_setting_id ON image_conversion(setting_id);
@@ -72,7 +72,7 @@ CREATE INDEX ix_image_conversion_setting_id ON image_conversion(setting_id);
 CREATE TABLE image_conversion_file (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     image_conversion_id INTEGER NOT NULL REFERENCES image_conversion(id) ON DELETE CASCADE,
-    object_key VARCHAR(512) NOT NULL,
+    object_key TEXT NOT NULL,
     size_bytes INTEGER NOT NULL CHECK (size_bytes > 0),
     position INTEGER NOT NULL CHECK (position >= 0),
     CONSTRAINT uq_image_conversion_file_object_key UNIQUE (object_key),
@@ -84,7 +84,7 @@ CREATE TABLE processing_job (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES user_account(id) ON DELETE CASCADE,
     setting_id INTEGER NOT NULL REFERENCES setting(id) ON DELETE RESTRICT,
-    status VARCHAR(16) NOT NULL DEFAULT 'queued'
+    status TEXT NOT NULL DEFAULT 'queued'
         CHECK (status IN ('queued', 'running', 'completed', 'failed', 'cancelled')),
     cancellation_requested BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

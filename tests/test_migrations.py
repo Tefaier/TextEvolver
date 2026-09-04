@@ -30,6 +30,8 @@ def test_sqlite_flyway_baseline_is_fresh_and_complete(tmp_path: Path):
     phrase_columns = {
         column[1]: column for column in database.execute("PRAGMA table_info(phrase_conversion)")
     }
+    assert phrase_columns["phrase_from"][2].upper() == "TEXT"
+    assert phrase_columns["phrase_to"][2].upper() == "TEXT"
     assert phrase_columns["regex"][3] == 1
     assert phrase_columns["regex"][4].upper() == "FALSE"
     image_file_foreign_key = database.execute("PRAGMA foreign_key_list(image_conversion_file)").fetchone()
@@ -57,6 +59,7 @@ def test_postgresql_and_sqlite_baselines_declare_the_same_tables():
     for dialect in ("postgresql", "sqlite"):
         sql = Path(f"migrations/sql/{dialect}/V1__initial_schema.sql").read_text(encoding="utf-8").lower()
         assert {table for table in expected if f"create table {table}" in sql} == expected
+        assert "varchar" not in sql
 
     postgresql_sql = Path("migrations/sql/postgresql/V1__initial_schema.sql").read_text(encoding="utf-8").upper()
     assert postgresql_sql.count("ID BIGSERIAL PRIMARY KEY") == len(expected)
@@ -95,3 +98,4 @@ def test_sqlalchemy_model_generation_is_deterministic(tmp_path: Path):
     assert generated == outputs[1].read_text(encoding="utf-8")
     assert generated == Path("src/text_evolver/db/models.py").read_text(encoding="utf-8")
     assert "Mapped[Optional[int]] = mapped_column(Integer, primary_key=True)" not in generated
+    assert "String(" not in generated

@@ -43,11 +43,11 @@
             <div class="col">
                 <div class="data_info">
                     <label>Initial unit</label>
-                    <input name="unit_from" class="slim_input" type="text" value="From" size="15" minlength="1">
+                    <input name="unit_from" class="slim_input" type="text" value="From" size="15" minlength="1" maxlength="64">
                 </div>
                 <div class="data_info">
                     <label>New unit</label>
-                    <input name="unit_to" class="slim_input" type="text" value="To" size="15">
+                    <input name="unit_to" class="slim_input" type="text" value="To" size="15" maxlength="64">
                 </div>
                 <div class="data_info">
                     <label>Convertation of unit</label>
@@ -71,7 +71,7 @@
             <div class="col">
                 <div class="data_info">
                     <label>Trigger phrase</label>
-                    <input name="image_phrase" class="slim_input" type="text" value="Phrase" size="15" minlength="1">
+                    <input name="image_phrase" class="slim_input" type="text" value="Phrase" size="15" minlength="1" maxlength="64">
                 </div>
                 <div class="data_info">
                     <label>Separation</label>
@@ -79,7 +79,7 @@
                 </div>
                 <div class="data_info">
                     <label>Explanation</label>
-                    <input name="image_expl" class="slim_input" type="text" value="Explanation" size="15">
+                    <input name="image_expl" class="slim_input" type="text" value="Explanation" size="15" maxlength="64">
                 </div>
                 <div class="data_info">
                     <label>Accept suffix (s/es/'/'s)</label>
@@ -102,11 +102,11 @@
             <div class="col">
                 <div class="data_info">
                     <label>Change from</label>
-                    <input name="phrase_from" class="slim_input" type="text" value="Phrase from" size="15" minlength="1">
+                    <input name="phrase_from" class="slim_input" type="text" value="Phrase from" size="15" minlength="1" maxlength="64">
                 </div>
                 <div class="data_info">
                     <label>Change to</label>
-                    <input name="phrase_to" class="slim_input" type="text" value="Phrase to" size="15">
+                    <input name="phrase_to" class="slim_input" type="text" value="Phrase to" size="15" maxlength="64">
                 </div>
                 <div class="data_info">
                     <label>Direct change</label>
@@ -166,7 +166,7 @@
             <p class="data_info">Image add (convertation): adds image based on some phrase</p>
             <p class="data_info">Image - Trigger phrase: what phrase will be recognised and trigger change (if it overlaps with fandom's value, they will merge)</p>
             <p class="data_info">Image - Separation: determines number of words that have to be between the same phrase to trigger image insertion. If it's "1", it will insert image only once</p>
-            <p class="data_info">Image - Explanation: a phrase that will be added on image as a sort of explanation. Must be less than 20 symbols. If left empty, there will be none (and no space on image reserved)</p>
+            <p class="data_info">Image - Explanation: a phrase that will be added on image as a sort of explanation. Must be at most 64 characters. If left empty, there will be none (and no space on image reserved)</p>
             <p class="data_info">Image - Accept suffix: if recognition by phrase should accept having suffixes</p>
             <p class="data_info">Image - Images: image(s) that will be added. If there are few, one will be chosen randomly. If it's merged with fandom's value, image will be chosen from these and fandom's. Also, if you opened already existing setting, living it empty will leave previous images and changing will set new</p>
             <br>
@@ -198,7 +198,7 @@
                     </div>
                     <div class="col">
                         <div class="data_info">
-                            <input name="set_name" class="slim_input" type="text" value="{{ setting.name }}" size="32" maxlength="32" minlength="1">
+                            <input name="set_name" class="slim_input" type="text" value="{{ setting.name }}" size="32" maxlength="64" minlength="1">
                         </div>
                     </div>
                 </div>
@@ -358,11 +358,11 @@
                     <div class="col"> {# information of unit convertation #}
                         <div class="data_info"> {# unit_conv.phrase_from #}
                             <label>Initial unit</label>
-                            <input name="unit_from" class="slim_input" type="text" value="{{ unit_conv.phrase_from }}" size="15" minlength="1">
+                            <input name="unit_from" class="slim_input" type="text" value="{{ unit_conv.phrase_from }}" size="15" minlength="1" maxlength="64">
                         </div>
                         <div class="data_info"> {# unit_conv.phrase_to #}
                             <label>New unit</label>
-                            <input name="unit_to" class="slim_input" type="text" value="{{ unit_conv.phrase_to }}" size="15">
+                            <input name="unit_to" class="slim_input" type="text" value="{{ unit_conv.phrase_to }}" size="15" maxlength="64">
                         </div>
                         <div class="data_info"> {# unit_conv.conversion #}
                             <label>Convertation of unit</label>
@@ -400,7 +400,7 @@
                     <div class="col"> {# information of image_conv #}
                         <div class="data_info"> {# image_conv.phrase #}
                             <label>Trigger phrase</label>
-                            <input name="image_phrase" class="slim_input" type="text" value="{{ image_conv.phrase }}" size="15" minlength="1">
+                            <input name="image_phrase" class="slim_input" type="text" value="{{ image_conv.phrase }}" size="15" minlength="1" maxlength="64">
                         </div>
                         <div class="data_info"> {# image_conv.separation #}
                             <label>Separation</label>
@@ -408,7 +408,7 @@
                         </div>
                         <div class="data_info"> {# image_conv.explanation #}
                             <label>Explanation</label>
-                            <input name="image_expl" class="slim_input" type="text" value="{{ image_conv.explanation }}" size="15">
+                            <input name="image_expl" class="slim_input" type="text" value="{{ image_conv.explanation }}" size="15" maxlength="64">
                         </div>
                         <div class="data_info"> {# image_conv.mutations #}
                             <label>Accept suffix (s/es/'/'s)</label>
@@ -445,11 +445,11 @@
                     <div class="col"> {# information of text convertation #}
                         <div class="data_info"> {# phrase_conv.phrase_from #}
                             <label>Change from</label>
-                            <input name="phrase_from" class="slim_input" type="text" value="{{ phrase_conv.phrase_from }}" size="15" minlength="1">
+                            <input name="phrase_from" class="slim_input" type="text" value="{{ phrase_conv.phrase_from }}" size="15" minlength="1" maxlength="64">
                         </div>
                         <div class="data_info"> {# phrase_conv.phrase_to #}
                             <label>Change to</label>
-                            <input name="phrase_to" class="slim_input" type="text" value="{{ phrase_conv.phrase_to }}" size="15">
+                            <input name="phrase_to" class="slim_input" type="text" value="{{ phrase_conv.phrase_to }}" size="15" maxlength="64">
                         </div>
                         <div class="data_info"> {# phrase_conv.direct #}
                             <label>Direct change</label>

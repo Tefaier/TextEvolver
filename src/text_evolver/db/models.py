@@ -1,7 +1,7 @@
 from typing import Optional
 import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, Enum, Float, ForeignKey, Index, Integer, LargeBinary, String, TIMESTAMP, Text, UniqueConstraint, text
+from sqlalchemy import Boolean, CheckConstraint, Enum, Float, ForeignKey, Index, Integer, LargeBinary, TIMESTAMP, Text, UniqueConstraint, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
@@ -12,7 +12,7 @@ class UserAccount(Base):
     __tablename__ = 'user_account'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    username: Mapped[str] = mapped_column(String(64), nullable=False)
+    username: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     last_entry: Mapped[datetime.datetime] = mapped_column(TIMESTAMP, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
     setting_limit: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('5'))
 
@@ -30,7 +30,7 @@ class Setting(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     owner_id: Mapped[int] = mapped_column(ForeignKey('user_account.id'), nullable=False)
-    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
     public: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('FALSE'))
     clean_empty: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('FALSE'))
     convert_to_utf: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('FALSE'))
@@ -71,7 +71,7 @@ class Fandom(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     setting_id: Mapped[int] = mapped_column(ForeignKey('setting.id'), nullable=False)
-    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('FALSE'))
     separation: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('1'))
     support_value_1: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('FALSE'))
@@ -88,9 +88,9 @@ class ImageConversion(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     setting_id: Mapped[int] = mapped_column(ForeignKey('setting.id'), nullable=False)
-    phrase: Mapped[str] = mapped_column(String(64), nullable=False)
+    phrase: Mapped[str] = mapped_column(Text, nullable=False)
     separation: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('1'))
-    explanation: Mapped[str] = mapped_column(String(64), nullable=False)
+    explanation: Mapped[str] = mapped_column(Text, nullable=False)
     mutations: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('FALSE'))
 
     setting: Mapped['Setting'] = relationship('Setting', back_populates='image_conversion')
@@ -105,8 +105,8 @@ class PhraseConversion(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     setting_id: Mapped[int] = mapped_column(ForeignKey('setting.id'), nullable=False)
-    phrase_from: Mapped[str] = mapped_column(String(64), nullable=False)
-    phrase_to: Mapped[str] = mapped_column(String(64), nullable=False)
+    phrase_from: Mapped[str] = mapped_column(Text, nullable=False)
+    phrase_to: Mapped[str] = mapped_column(Text, nullable=False)
     direct: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('FALSE'))
     mutations: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('FALSE'))
     regex: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('FALSE'))
@@ -145,8 +145,8 @@ class UnitConversion(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     setting_id: Mapped[int] = mapped_column(ForeignKey('setting.id'), nullable=False)
-    phrase_from: Mapped[str] = mapped_column(String(64), nullable=False)
-    phrase_to: Mapped[str] = mapped_column(String(64), nullable=False)
+    phrase_from: Mapped[str] = mapped_column(Text, nullable=False)
+    phrase_to: Mapped[str] = mapped_column(Text, nullable=False)
     conversion: Mapped[float] = mapped_column(Float, nullable=False)
     can_be_word: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('FALSE'))
 
@@ -165,7 +165,7 @@ class ImageConversionFile(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     image_conversion_id: Mapped[int] = mapped_column(ForeignKey('image_conversion.id'), nullable=False)
-    object_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    object_key: Mapped[str] = mapped_column(Text, nullable=False)
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     position: Mapped[int] = mapped_column(Integer, nullable=False)
 

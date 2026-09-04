@@ -530,3 +530,124 @@ def test_update_setting_forces_regex_false_for_non_direct_phrase(database, app_s
         assert phrase is not None
         assert phrase.direct is False
         assert phrase.regex is False
+
+
+def _setting_form_for_length_case(field_name: str, value: str) -> FormData:
+    fields: list[tuple[str, object]] = [
+        ("set_name", value if field_name == "set_name" else "Conversions"),
+        ("set_public", "False"),
+        ("set_empty", "False"),
+        ("set_utf", "False"),
+        ("set_coma_sep", "False"),
+        ("set_expect_feet", "False"),
+    ]
+    if field_name == "fandom":
+        fields.extend(
+            [
+                ("fandom", value),
+                ("fandom_active", "False"),
+                ("fandom_separation", "1"),
+                ("fandom_value_1", "False"),
+                ("fandom_value_2", "False"),
+            ]
+        )
+    elif field_name in {"unit_from", "unit_to"}:
+        fields.extend(
+            [
+                ("unit_from", value if field_name == "unit_from" else "source"),
+                ("unit_to", value if field_name == "unit_to" else "replacement"),
+                ("unit_convert", "1"),
+                ("unit_can", "False"),
+            ]
+        )
+    elif field_name in {"phrase_from", "phrase_to"}:
+        fields.extend(
+            [
+                ("phrase_from", value if field_name == "phrase_from" else "source"),
+                ("phrase_to", value if field_name == "phrase_to" else "replacement"),
+                ("phrase_direct", "False"),
+                ("phrase_mutations", "False"),
+                ("phrase_regex", "False"),
+            ]
+        )
+    elif field_name in {"image_phrase", "image_expl"}:
+        token = "new-length-test"
+        fields.extend(
+            [
+                ("image_token", token),
+                ("image_phrase", value if field_name == "image_phrase" else "trigger"),
+                ("image_separation", "1"),
+                ("image_expl", value if field_name == "image_expl" else "explanation"),
+                ("image_mutations", "False"),
+                (f"image_files_{token}", TrackingUploadFile(b"image", "image.png")),
+            ]
+        )
+    return FormData(fields)
+
+
+@pytest.mark.parametrize(
+    ("field_name", "message"),
+    [
+        ("set_name", "Setting name"),
+        ("fandom", "Fandom name"),
+        ("unit_from", "Unit source phrase"),
+        ("unit_to", "Unit replacement phrase"),
+        ("phrase_from", "Phrase source"),
+        ("phrase_to", "Phrase replacement"),
+        ("image_phrase", "Image trigger phrase"),
+        ("image_expl", "Image explanation"),
+    ],
+)
+def test_update_setting_rejects_overlong_text_fields(
+    database,
+    app_settings,
+    image_storage,
+    field_name: str,
+    message: str,
+):
+    with Session(database) as session:
+        owner = UserAccount(username=f"length-{field_name}")
+        session.add(owner)
+        session.flush()
+        setting = Setting(owner_id=owner.id, name="Conversions")
+        session.add(setting)
+        session.commit()
+        changes = ImageStorageChanges(image_storage)
+
+        with pytest.raises(ValidationError, match=message):
+            asyncio.run(
+                update_setting_from_form(
+                    session,
+                    setting.id,
+                    _setting_form_for_length_case(field_name, "x" * 65),
+                    app_settings,
+                    image_storage,
+                    changes,
+                )
+            )
+
+        assert image_storage.objects == {}
+
+
+def test_update_setting_accepts_text_at_the_explicit_limit(database, app_settings, image_storage):
+    with Session(database) as session:
+        owner = UserAccount(username="length-boundary")
+        session.add(owner)
+        session.flush()
+        setting = Setting(owner_id=owner.id, name="Conversions")
+        session.add(setting)
+        session.commit()
+
+        asyncio.run(
+            update_setting_from_form(
+                session,
+                setting.id,
+                _setting_form_for_length_case("set_name", "x" * 64),
+                app_settings,
+                image_storage,
+                ImageStorageChanges(image_storage),
+            )
+        )
+        session.flush()
+
+        assert setting.name == "x" * 64

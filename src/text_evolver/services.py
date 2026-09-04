@@ -31,6 +31,7 @@ TRUTHY = {"true", "1", "yes", "on"}
 FALSY = {"false", "0", "no", "off"}
 IMAGE_UPLOAD_FIELD_PREFIX = "image_files_"
 IMAGE_ROW_TOKEN_PATTERN = re.compile(r"[a-zA-Z0-9_-]{1,80}")
+SETTING_TEXT_MAX_LENGTH = 64
 
 
 class ValidationError(ValueError):
@@ -74,6 +75,17 @@ def parse_bool(value: Any, field_name: str) -> bool:
     if normalized in FALSY:
         return False
     raise ValidationError(f"Invalid boolean value for {field_name}")
+
+
+def _setting_text(value: Any, field_name: str, *, strip: bool = False, required: bool = False) -> str:
+    text_value = str(value)
+    if strip:
+        text_value = text_value.strip()
+    if required and not text_value:
+        raise ValidationError(f"{field_name} must not be empty")
+    if len(text_value) > SETTING_TEXT_MAX_LENGTH:
+        raise ValidationError(f"{field_name} must contain at most {SETTING_TEXT_MAX_LENGTH} characters")
+    return text_value
 
 
 def validate_credentials(username: str, password: str, confirm: str | None = None) -> None:
@@ -335,7 +347,7 @@ def _parse_image_submissions(
     submissions: list[ImageSubmission] = []
     used_tokens: set[str] = set()
     for index, submitted_phrase in enumerate(phrases):
-        phrase = str(submitted_phrase).strip()
+        phrase = _setting_text(submitted_phrase, "Image trigger phrase", strip=True)
         if not phrase:
             continue
         token = str(tokens[index])
@@ -354,7 +366,7 @@ def _parse_image_submissions(
             ImageSubmission(
                 phrase=phrase,
                 separation=max(1, int(separations[index])),
-                explanation=str(explanations[index]),
+                explanation=_setting_text(explanations[index], "Image explanation"),
                 mutations=parse_bool(image_mutations[index], "image_mutations"),
                 existing_conversion_id=existing.id if existing is not None else None,
                 uploads=uploads,
@@ -446,9 +458,7 @@ async def update_setting_from_form(
     setting = session.get(Setting, setting_id, with_for_update=True)
     if setting is None:
         raise ValidationError("Setting not found")
-    name = str(form.get("set_name", "")).strip()
-    if not name or len(name) > 64:
-        raise ValidationError("Setting name must contain between 1 and 64 characters")
+    name = _setting_text(form.get("set_name", ""), "Setting name", strip=True, required=True)
 
     setting.name = name
     setting.public = parse_bool(form.get("set_public"), "set_public")
@@ -485,7 +495,7 @@ async def update_setting_from_form(
     for index, fandom_name in enumerate(fandom):
         submitted_fandoms.append(
             {
-                "name": str(fandom_name),
+                "name": _setting_text(fandom_name, "Fandom name", required=True),
                 "active": parse_bool(active[index], "fandom_active"),
                 "separation": max(1, int(separation[index])),
                 "support_value_1": parse_bool(value_1[index], "fandom_value_1"),
@@ -498,12 +508,12 @@ async def update_setting_from_form(
     )
     submitted_units: list[dict[str, Any]] = []
     for index, phrase_from in enumerate(unit_from):
-        phrase_from = str(phrase_from).strip()
+        phrase_from = _setting_text(phrase_from, "Unit source phrase", strip=True)
         if phrase_from:
             submitted_units.append(
                 {
                     "phrase_from": phrase_from,
-                    "phrase_to": str(unit_to[index]),
+                    "phrase_to": _setting_text(unit_to[index], "Unit replacement phrase"),
                     "conversion": float(conversion[index]),
                     "can_be_word": parse_bool(can_be_word[index], "unit_can"),
                 }
@@ -514,11 +524,11 @@ async def update_setting_from_form(
     )
     submitted_phrases: list[dict[str, Any]] = []
     for index, source in enumerate(phrase_from):
-        source = str(source).strip()
+        source = _setting_text(source, "Phrase source", strip=True)
         if source:
             direct_value = parse_bool(direct[index], "phrase_direct")
             regex_value = direct_value and parse_bool(regex_values[index], "phrase_regex")
-            replacement = str(phrase_to[index])
+            replacement = _setting_text(phrase_to[index], "Phrase replacement")
             if regex_value:
                 try:
                     pattern = re.compile(source)

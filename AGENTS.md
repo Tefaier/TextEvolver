@@ -87,6 +87,10 @@ For every schema change:
 SQLite is for model generation and isolated tests only. Do not use SQLAlchemy
 metadata creation or restore Alembic/Flask-Migrate.
 
+Schema string columns use `TEXT`. Preserve user-facing size limits in service
+validation rather than database `VARCHAR` declarations; editable setting text
+fields currently accept at most 64 characters.
+
 ## Configuration and paths
 
 Configuration is defined in `src/text_evolver/config.py` and loaded from
