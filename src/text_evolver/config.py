@@ -2,6 +2,7 @@ import base64
 import binascii
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -20,6 +21,12 @@ class AppSettings(BaseSettings):
     )
     work_root: Path = Field(default=Path("var/work"), validation_alias="WORK_ROOT")
     temp_root: Path = Field(default=Path("var/tmp"), validation_alias="TEMP_ROOT")
+    s3_endpoint_url: str = Field(min_length=1, validation_alias="S3_ENDPOINT_URL")
+    s3_bucket: str = Field(min_length=3, validation_alias="S3_BUCKET")
+    s3_region: str = Field(default="us-east-1", min_length=1, validation_alias="S3_REGION")
+    s3_access_key: SecretStr = Field(min_length=3, validation_alias="S3_ACCESS_KEY")
+    s3_secret_key: SecretStr = Field(min_length=8, validation_alias="S3_SECRET_KEY")
+    s3_force_path_style: bool = Field(default=True, validation_alias="S3_FORCE_PATH_STYLE")
     chrome_binary: str | None = Field(default=None, validation_alias="CHROME_BINARY")
     cookie_secure: bool = Field(default=False, validation_alias="COOKIE_SECURE")
     upload_limit_bytes: int = Field(default=26_214_400, ge=1, validation_alias="UPLOAD_LIMIT_BYTES")
@@ -42,6 +49,31 @@ class AppSettings(BaseSettings):
     @classmethod
     def empty_previous_key_values_are_none(cls, value: object) -> object:
         return None if value == "" else value
+
+    @field_validator("s3_endpoint_url", mode="after")
+    @classmethod
+    def validate_s3_endpoint_url(cls, value: str) -> str:
+        endpoint = value.strip().rstrip("/")
+        parsed = urlsplit(endpoint)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.query or parsed.fragment:
+            raise ValueError("S3_ENDPOINT_URL must be an HTTP URL without query parameters or fragments")
+        return endpoint
+
+    @field_validator("s3_bucket", mode="after")
+    @classmethod
+    def validate_s3_bucket(cls, value: str) -> str:
+        if (
+            len(value) > 63
+            or value.lower() != value
+            or not value[0].isalnum()
+            or not value[-1].isalnum()
+            or any(character not in "abcdefghijklmnopqrstuvwxyz0123456789.-" for character in value)
+            or ".." in value
+            or ".-" in value
+            or "-." in value
+        ):
+            raise ValueError("S3_BUCKET must be a valid lowercase bucket name")
+        return value
 
     @model_validator(mode="after")
     def validate_password_keys(self) -> "AppSettings":

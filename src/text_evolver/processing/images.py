@@ -75,7 +75,8 @@ def _caption_image(text: str, font: ImageFont.ImageFont, max_width: int) -> Imag
 def get_image(binary: object, name: str, text1: str, text2: str) -> str | None:
     """Compose captions with Pillow only; no display or temporary EPS file is required."""
     try:
-        source = Image.open(BytesIO(convert_binary(binary, "PIL"))).convert("RGB")
+        image_bytes = binary.read_bytes() if isinstance(binary, Path) else convert_binary(binary, "PIL")
+        source = Image.open(BytesIO(image_bytes)).convert("RGB")
         bottom_label = _caption_image(text1, _font(30), source.width) if text1 else None
         right_label = _caption_image(text2, _font(27), source.height).rotate(90, expand=True) if text2 else None
 

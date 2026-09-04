@@ -1,4 +1,5 @@
 from io import BytesIO
+from pathlib import Path
 
 from PIL import Image
 
@@ -49,3 +50,14 @@ def test_get_image_does_not_expand_without_captions():
     assert result is not None
     with _decoded_image(result) as image:
         assert image.size == (80, 50)
+
+
+def test_get_image_reads_a_staged_local_file(tmp_path: Path):
+    source = tmp_path / "staged.png"
+    source.write_bytes(_source_image(64, 48))
+
+    result = get_image(source, "unused", "", "")
+
+    assert result is not None
+    with _decoded_image(result) as image:
+        assert image.size == (64, 48)

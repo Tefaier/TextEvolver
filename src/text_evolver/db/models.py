@@ -92,9 +92,9 @@ class ImageConversion(Base):
     separation: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('1'))
     explanation: Mapped[str] = mapped_column(String(64), nullable=False)
     mutations: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('FALSE'))
-    images: Mapped[str] = mapped_column(Text, nullable=False)
 
     setting: Mapped['Setting'] = relationship('Setting', back_populates='image_conversion')
+    image_conversion_file: Mapped[list['ImageConversionFile']] = relationship('ImageConversionFile', back_populates='image_conversion')
 
 
 class PhraseConversion(Base):
@@ -151,3 +151,22 @@ class UnitConversion(Base):
     can_be_word: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('FALSE'))
 
     setting: Mapped['Setting'] = relationship('Setting', back_populates='unit_conversion')
+
+
+class ImageConversionFile(Base):
+    __tablename__ = 'image_conversion_file'
+    __table_args__ = (
+        CheckConstraint('position >= 0'),
+        CheckConstraint('size_bytes > 0'),
+        UniqueConstraint('image_conversion_id', 'position', name='uq_image_conversion_file_position'),
+        UniqueConstraint('object_key', name='uq_image_conversion_file_object_key'),
+        Index('ix_image_conversion_file_conversion_id', 'image_conversion_id')
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    image_conversion_id: Mapped[int] = mapped_column(ForeignKey('image_conversion.id'), nullable=False)
+    object_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    image_conversion: Mapped['ImageConversion'] = relationship('ImageConversion', back_populates='image_conversion_file')

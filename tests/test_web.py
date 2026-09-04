@@ -5,8 +5,23 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from text_evolver.db.models import ProcessingJob, Setting, UserAccount, UserPassword
+from text_evolver.db.models import (
+    ImageConversion,
+    ImageConversionFile,
+    ProcessingJob,
+    Setting,
+    UserAccount,
+    UserPassword,
+)
 from text_evolver.web.auth import encrypt_password, verify_password
+
+
+def test_readiness_checks_database_and_object_storage(client, image_storage):
+    response = client.get("/health/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready"}
+    assert image_storage.availability_checks == 1
 
 
 def test_registration_encrypts_password(client: TestClient, database, app_settings):
@@ -161,3 +176,45 @@ def test_private_setting_requires_owner(client: TestClient, database):
     response = client.get("/setting/999", follow_redirects=False)
     assert response.status_code == 303
     assert response.headers["location"].endswith("/login")
+
+
+def test_deleting_setting_deletes_its_stored_images(registered_client, database, image_storage):
+    with Session(database) as session:
+        owner = session.scalar(select(UserAccount).where(UserAccount.username == "reader"))
+        assert owner is not None
+        setting = Setting(owner_id=owner.id, name="Delete images")
+        session.add(setting)
+        session.flush()
+        conversion = ImageConversion(
+            setting_id=setting.id,
+            phrase="trigger",
+            separation=1,
+            explanation="",
+            mutations=False,
+        )
+        session.add(conversion)
+        session.flush()
+        object_key = f"users/{owner.id}/settings/{setting.id}/image.png"
+        session.add(
+            ImageConversionFile(
+                image_conversion_id=conversion.id,
+                object_key=object_key,
+                size_bytes=5,
+                position=0,
+            )
+        )
+        session.commit()
+        setting_id = setting.id
+    image_storage.objects[object_key] = b"image"
+    token = csrf_from(registered_client.get("/my_settings"))
+
+    response = registered_client.post(
+        f"/delete_set/{setting_id}",
+        data={"csrf_token": token},
+    )
+
+    assert response.status_code == 204
+    assert object_key not in image_storage.objects
+    assert object_key in image_storage.deleted
+    with Session(database) as session:
+        assert session.get(Setting, setting_id) is None

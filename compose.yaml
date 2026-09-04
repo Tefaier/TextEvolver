@@ -57,6 +57,40 @@ services:
         condition: service_healthy
     restart: "no"
 
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - user-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  minio-init:
+    image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mc alias set local http://minio:9000 "$${S3_ACCESS_KEY}" "$${S3_SECRET_KEY}" &&
+        mc mb --ignore-existing "local/$${S3_BUCKET}"
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET: ${S3_BUCKET}
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+
   app:
     build:
       context: .
@@ -71,6 +105,12 @@ services:
       PASSWORD_KEY_PREVIOUS_VERSION: ${PASSWORD_KEY_PREVIOUS_VERSION:-}
       WORK_ROOT: /data/work
       TEMP_ROOT: /data/tmp
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_BUCKET: ${S3_BUCKET}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       UPLOAD_LIMIT_BYTES: ${UPLOAD_LIMIT_BYTES:-26214400}
       SETTING_LIMIT_BYTES: ${SETTING_LIMIT_BYTES:-536870912}
@@ -85,6 +125,8 @@ services:
         condition: service_completed_successfully
       pgbouncer:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   worker:
@@ -99,6 +141,12 @@ services:
       PASSWORD_KEY_PREVIOUS_VERSION: ${PASSWORD_KEY_PREVIOUS_VERSION:-}
       WORK_ROOT: /data/work
       TEMP_ROOT: /data/tmp
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_BUCKET: ${S3_BUCKET}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
       CHROME_BINARY: /usr/bin/chromium
       WORKER_POLL_SECONDS: ${WORKER_POLL_SECONDS:-2}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-1}
@@ -111,9 +159,12 @@ services:
     depends_on:
       app:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     restart: unless-stopped
 
 volumes:
   postgres-data:
   work-data:
   temp-data:
+  user-data:

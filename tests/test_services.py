@@ -1,5 +1,4 @@
 import asyncio
-import base64
 from io import BytesIO
 from types import SimpleNamespace
 
@@ -11,18 +10,20 @@ from starlette.datastructures import FormData, UploadFile
 from text_evolver.db.models import (
     Fandom,
     ImageConversion,
+    ImageConversionFile,
     PhraseConversion,
     Setting,
     UnitConversion,
     UserAccount,
 )
+from text_evolver.image_storage import ImageStorageChanges
 from text_evolver.services import (
     ImageSubmission,
     ValidationError,
     _acquire_create_job_lock,
     _calculate_row_changes,
-    _materialize_image_submissions,
-    _read_upload_with_limit,
+    _validate_image_submission_size,
+    copy_setting,
     update_setting_from_form,
 )
 
@@ -53,20 +54,22 @@ def test_calculate_row_changes_matches_duplicate_values_one_for_one():
     assert changes.added == ({"value": "added"},)
 
 
-def test_oversized_upload_is_rejected_before_content_is_read():
+def test_oversized_upload_is_rejected_before_storage_is_used():
     upload = TrackingUploadFile(b"123456", "large.png")
+    submission = ImageSubmission("Example", 1, "", False, None, (upload,))
 
     with pytest.raises(ValidationError, match="size limit"):
-        asyncio.run(_read_upload_with_limit(upload, available_bytes=5))
+        _validate_image_submission_size([submission], {}, setting_limit_bytes=5)
 
     assert upload.read_sizes == []
 
 
 def test_empty_upload_is_rejected_before_content_is_read():
     upload = TrackingUploadFile(b"", "empty.png")
+    submission = ImageSubmission("Example", 1, "", False, None, (upload,))
 
     with pytest.raises(ValidationError, match="is empty"):
-        asyncio.run(_read_upload_with_limit(upload, available_bytes=5))
+        _validate_image_submission_size([submission], {}, setting_limit_bytes=5)
 
     assert upload.read_sizes == []
 
@@ -74,10 +77,10 @@ def test_empty_upload_is_rejected_before_content_is_read():
 def test_combined_upload_size_is_checked_before_any_content_is_read():
     first = TrackingUploadFile(b"1234", "first.png")
     second = TrackingUploadFile(b"5678", "second.png")
-    submission = ImageSubmission("Example", 1, "", False, "", (first, second))
+    submission = ImageSubmission("Example", 1, "", False, None, (first, second))
 
     with pytest.raises(ValidationError, match="size limit"):
-        asyncio.run(_materialize_image_submissions([submission], setting_limit_bytes=7))
+        _validate_image_submission_size([submission], {}, setting_limit_bytes=7)
 
     assert first.read_sizes == []
     assert second.read_sizes == []
@@ -110,7 +113,7 @@ def test_create_job_lock_is_skipped_for_sqlite():
     assert executed == []
 
 
-def test_update_setting_preserves_unchanged_rows(database, app_settings):
+def test_update_setting_preserves_unchanged_rows(database, app_settings, image_storage):
     with Session(database) as session:
         user = UserAccount(username="owner")
         session.add(user)
@@ -154,7 +157,6 @@ def test_update_setting_preserves_unchanged_rows(database, app_settings):
             separation=50,
             explanation="Electric mouse",
             mutations=True,
-            images=base64.b64encode(b"existing").decode("ascii"),
         )
         replaced_image = ImageConversion(
             setting_id=setting.id,
@@ -162,10 +164,25 @@ def test_update_setting_preserves_unchanged_rows(database, app_settings):
             separation=75,
             explanation="Evolution Pokemon",
             mutations=False,
-            images=base64.b64encode(b"old-eevee").decode("ascii"),
         )
         session.add_all((fandom, preserved_unit, changed_unit, phrase, image, replaced_image))
+        session.flush()
+        image_file = ImageConversionFile(
+            image_conversion_id=image.id,
+            object_key="users/1/settings/1/pikachu.png",
+            size_bytes=len(b"existing"),
+            position=0,
+        )
+        replaced_file = ImageConversionFile(
+            image_conversion_id=replaced_image.id,
+            object_key="users/1/settings/1/old-eevee.png",
+            size_bytes=len(b"old-eevee"),
+            position=0,
+        )
+        session.add_all((image_file, replaced_file))
         session.commit()
+        image_storage.objects[image_file.object_key] = b"existing"
+        image_storage.objects[replaced_file.object_key] = b"old-eevee"
 
         setting_id = setting.id
         preserved_ids = {
@@ -176,6 +193,7 @@ def test_update_setting_preserves_unchanged_rows(database, app_settings):
         }
         changed_unit_id = changed_unit.id
         replaced_image_id = replaced_image.id
+        old_eevee_key = replaced_file.object_key
         replacement_data = b"new-eevee-image"
         replacement_data_2 = b"another-eevee"
         replacement_upload = TrackingUploadFile(replacement_data, "eevee.png")
@@ -226,8 +244,19 @@ def test_update_setting_preserves_unchanged_rows(database, app_settings):
             ]
         )
 
-        asyncio.run(update_setting_from_form(session, setting_id, form, app_settings))
+        storage_changes = ImageStorageChanges(image_storage)
+        asyncio.run(
+            update_setting_from_form(
+                session,
+                setting_id,
+                form,
+                app_settings,
+                image_storage,
+                storage_changes,
+            )
+        )
         session.commit()
+        storage_changes.database_committed()
         session.expire_all()
 
         assert session.scalar(select(Fandom.id).where(Fandom.setting_id == setting_id)) == preserved_ids["fandom"]
@@ -240,16 +269,27 @@ def test_update_setting_preserves_unchanged_rows(database, app_settings):
             for value in session.scalars(select(ImageConversion).where(ImageConversion.setting_id == setting_id))
         }
         assert images["Pikachu"].id == preserved_ids["image"]
-        assert images["Pikachu"].images == base64.b64encode(b"existing").decode("ascii")
-        assert images["Eevee"].id != replaced_image_id
-        assert images["Eevee"].images == "*".join(
-            (
-                base64.b64encode(replacement_data).decode("ascii"),
-                base64.b64encode(replacement_data_2).decode("ascii"),
+        assert images["Eevee"].id == replaced_image_id
+        pikachu_files = list(
+            session.scalars(
+                select(ImageConversionFile).where(
+                    ImageConversionFile.image_conversion_id == images["Pikachu"].id
+                )
             )
         )
-        assert replacement_upload.read_sizes == [len(replacement_data)]
-        assert replacement_upload_2.read_sizes == [len(replacement_data_2)]
+        assert [value.object_key for value in pikachu_files] == [image_file.object_key]
+        eevee_files = list(
+            session.scalars(
+                select(ImageConversionFile)
+                .where(ImageConversionFile.image_conversion_id == images["Eevee"].id)
+                .order_by(ImageConversionFile.position)
+            )
+        )
+        assert [image_storage.objects[value.object_key] for value in eevee_files] == [
+            replacement_data,
+            replacement_data_2,
+        ]
+        assert old_eevee_key in image_storage.deleted
 
         units = list(
             session.scalars(
@@ -264,7 +304,157 @@ def test_update_setting_preserves_unchanged_rows(database, app_settings):
         assert session.get(UnitConversion, changed_unit_id) is None
 
 
-def test_update_setting_rejects_invalid_phrase_regex(database, app_settings):
+def test_copy_setting_copies_image_objects_to_independent_keys(database, image_storage):
+    with Session(database) as session:
+        owner = UserAccount(username="source-owner")
+        copier = UserAccount(username="copier")
+        session.add_all((owner, copier))
+        session.flush()
+        source = Setting(owner_id=owner.id, name="Public", public=True)
+        session.add(source)
+        session.flush()
+        conversion = ImageConversion(
+            setting_id=source.id,
+            phrase="trigger",
+            separation=1,
+            explanation="",
+            mutations=False,
+        )
+        session.add(conversion)
+        session.flush()
+        source_key = f"users/{owner.id}/settings/{source.id}/source.png"
+        session.add(
+            ImageConversionFile(
+                image_conversion_id=conversion.id,
+                object_key=source_key,
+                size_bytes=5,
+                position=0,
+            )
+        )
+        image_storage.objects[source_key] = b"image"
+        session.commit()
+
+        storage_changes = ImageStorageChanges(image_storage)
+        copied = copy_setting(session, source.id, copier.id, image_storage, storage_changes)
+        session.commit()
+        storage_changes.database_committed()
+
+        copied_file = session.scalar(
+            select(ImageConversionFile)
+            .join(ImageConversion)
+            .where(ImageConversion.setting_id == copied.id)
+        )
+        assert copied_file is not None
+        assert copied_file.object_key != source_key
+        assert image_storage.objects[copied_file.object_key] == b"image"
+        assert image_storage.objects[source_key] == b"image"
+
+
+def test_new_image_object_is_deleted_when_database_rolls_back(database, app_settings, image_storage):
+    with Session(database) as session:
+        owner = UserAccount(username="rollback-owner")
+        session.add(owner)
+        session.flush()
+        setting = Setting(owner_id=owner.id, name="Rollback")
+        session.add(setting)
+        session.commit()
+        upload = TrackingUploadFile(b"new-image", "new.png")
+        form = FormData(
+            [
+                ("set_name", "Rollback"),
+                ("set_public", "False"),
+                ("set_empty", "False"),
+                ("set_utf", "False"),
+                ("set_coma_sep", "False"),
+                ("set_expect_feet", "False"),
+                ("image_token", "new-row"),
+                ("image_phrase", "trigger"),
+                ("image_separation", "1"),
+                ("image_expl", ""),
+                ("image_mutations", "False"),
+                ("image_files_new-row", upload),
+            ]
+        )
+        storage_changes = ImageStorageChanges(image_storage)
+
+        asyncio.run(
+            update_setting_from_form(
+                session,
+                setting.id,
+                form,
+                app_settings,
+                image_storage,
+                storage_changes,
+            )
+        )
+        created_keys = set(image_storage.objects)
+        session.rollback()
+        storage_changes.database_rolled_back()
+
+        assert created_keys
+        assert not created_keys.intersection(image_storage.objects)
+        assert session.scalar(select(ImageConversion).where(ImageConversion.setting_id == setting.id)) is None
+
+
+def test_removing_image_conversion_deletes_its_object_after_commit(database, app_settings, image_storage):
+    with Session(database) as session:
+        owner = UserAccount(username="remove-owner")
+        session.add(owner)
+        session.flush()
+        setting = Setting(owner_id=owner.id, name="Remove")
+        session.add(setting)
+        session.flush()
+        conversion = ImageConversion(
+            setting_id=setting.id,
+            phrase="trigger",
+            separation=1,
+            explanation="",
+            mutations=False,
+        )
+        session.add(conversion)
+        session.flush()
+        object_key = f"users/{owner.id}/settings/{setting.id}/remove.png"
+        session.add(
+            ImageConversionFile(
+                image_conversion_id=conversion.id,
+                object_key=object_key,
+                size_bytes=5,
+                position=0,
+            )
+        )
+        image_storage.objects[object_key] = b"image"
+        session.commit()
+        form = FormData(
+            [
+                ("set_name", "Remove"),
+                ("set_public", "False"),
+                ("set_empty", "False"),
+                ("set_utf", "False"),
+                ("set_coma_sep", "False"),
+                ("set_expect_feet", "False"),
+            ]
+        )
+        storage_changes = ImageStorageChanges(image_storage)
+
+        asyncio.run(
+            update_setting_from_form(
+                session,
+                setting.id,
+                form,
+                app_settings,
+                image_storage,
+                storage_changes,
+            )
+        )
+        assert object_key in image_storage.objects
+        session.commit()
+        storage_changes.database_committed()
+
+        assert object_key not in image_storage.objects
+        assert object_key in image_storage.deleted
+
+
+def test_update_setting_rejects_invalid_phrase_regex(database, app_settings, image_storage):
     with Session(database) as session:
         user = UserAccount(username="owner")
         session.add(user)
@@ -289,10 +479,19 @@ def test_update_setting_rejects_invalid_phrase_regex(database, app_settings):
         )
 
         with pytest.raises(ValidationError, match="Invalid phrase regular expression"):
-            asyncio.run(update_setting_from_form(session, setting.id, form, app_settings))
+            asyncio.run(
+                update_setting_from_form(
+                    session,
+                    setting.id,
+                    form,
+                    app_settings,
+                    image_storage,
+                    ImageStorageChanges(image_storage),
+                )
+            )
 
 
-def test_update_setting_forces_regex_false_for_non_direct_phrase(database, app_settings):
+def test_update_setting_forces_regex_false_for_non_direct_phrase(database, app_settings, image_storage):
     with Session(database) as session:
         user = UserAccount(username="owner")
         session.add(user)
@@ -316,7 +515,16 @@ def test_update_setting_forces_regex_false_for_non_direct_phrase(database, app_s
             ]
         )
 
-        asyncio.run(update_setting_from_form(session, setting.id, form, app_settings))
+        asyncio.run(
+            update_setting_from_form(
+                session,
+                setting.id,
+                form,
+                app_settings,
+                image_storage,
+                ImageStorageChanges(image_storage),
+            )
+        )
 
         phrase = session.scalar(select(PhraseConversion).where(PhraseConversion.setting_id == setting.id))
         assert phrase is not None

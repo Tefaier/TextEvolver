@@ -8,13 +8,14 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
-from sqlalchemy import select, text
+from sqlalchemy import delete, select, text
 from sqlalchemy.orm import Session
 from starlette.datastructures import UploadFile
 
 from text_evolver.config import AppSettings, get_application_settings
 from text_evolver.db.models import ProcessingJob, Setting, UserAccount, UserPassword
 from text_evolver.db.session import get_db
+from text_evolver.image_storage import ImageStorage, ImageStorageChanges, get_image_storage
 from text_evolver.services import (
     ALLOWED_EXTENSIONS,
     ValidationError,
@@ -28,6 +29,7 @@ from text_evolver.services import (
     list_user_settings,
     request_job_cancellation,
     search_settings,
+    setting_image_object_keys,
     update_setting_from_form,
     user_view,
     validate_credentials,
@@ -88,8 +90,12 @@ def health_live() -> dict[str, str]:
 
 
 @router.get("/health/ready", name="health_ready")
-def health_ready(session: Session = Depends(get_db)) -> dict[str, str]:
+def health_ready(
+    session: Session = Depends(get_db),
+    image_storage: ImageStorage = Depends(get_image_storage),
+) -> dict[str, str]:
     session.execute(text("SELECT 1"))
+    image_storage.check_available()
     return {"status": "ready"}
 
 
@@ -196,16 +202,33 @@ async def add_set(request: Request, session: Session = Depends(get_db)) -> Respo
 
 
 @router.post("/delete_set/{setting_id}", name="delete_set")
-async def delete_set(setting_id: int, request: Request, session: Session = Depends(get_db)) -> Response:
+async def delete_set(
+    setting_id: int,
+    request: Request,
+    session: Session = Depends(get_db),
+    image_storage: ImageStorage = Depends(get_image_storage),
+) -> Response:
     user = authenticated(request, session)
     await validate_csrf(request)
-    setting = session.scalar(select(Setting).where(Setting.id == setting_id, Setting.owner_id == user.id))
+    setting = session.scalar(
+        select(Setting).where(Setting.id == setting_id, Setting.owner_id == user.id).with_for_update()
+    )
     if setting is None:
         raise HTTPException(status_code=404, detail="Setting not found")
     referenced = session.scalar(select(ProcessingJob.id).where(ProcessingJob.setting_id == setting_id).limit(1))
     if referenced is not None:
         raise HTTPException(status_code=409, detail="Setting is referenced by a processing job")
-    session.delete(setting)
+    storage_changes = ImageStorageChanges(image_storage)
+    for object_key in setting_image_object_keys(session, setting_id):
+        storage_changes.obsolete_object(object_key)
+    session.execute(delete(Setting).where(Setting.id == setting_id))
+    try:
+        session.commit()
+    except Exception:
+        session.rollback()
+        storage_changes.database_rolled_back()
+        raise
+    storage_changes.database_committed()
     return Response(status_code=204)
 
 
@@ -265,6 +288,7 @@ async def setting_submit(
     request: Request,
     session: Session = Depends(get_db),
     app_settings: AppSettings = Depends(get_application_settings),
+    image_storage: ImageStorage = Depends(get_image_storage),
 ) -> Response:
     user = authenticated(request, session)
     await validate_csrf(request)
@@ -274,6 +298,8 @@ async def setting_submit(
         raise HTTPException(status_code=404, detail="Setting not found")
     if not setting.public and setting.owner_id != user.id:
         raise HTTPException(status_code=403, detail="This setting is private")
+    storage_changes = ImageStorageChanges(image_storage)
+    database_committed = False
     try:
         with session.begin_nested():
             if "copy" in form:
@@ -281,20 +307,31 @@ async def setting_submit(
                     raise ValidationError("You already own this setting")
                 if len(list_user_settings(session, user.id)) >= user.setting_limit:
                     raise ValidationError("Reached the allowed settings limit")
-                copy_setting(session, setting_id, user.id)
-                return redirect(request, "my_settings")
-
-            owns_setting = setting.owner_id == user.id
-            if ("save" in form or "save_run" in form) and not owns_setting:
-                raise HTTPException(status_code=403, detail="Only the owner can edit a setting")
-            if "save" in form or "save_run" in form:
-                await update_setting_from_form(session, setting_id, form, app_settings)
-                flash(request, f'Setting change successful with name "{form.get("set_name")}"', "success")
-            if "run" in form or "save_run" in form:
-                uploads = [value for value in form.getlist("Process_files") if isinstance(value, UploadFile)]
-                await create_job(session, app_settings, user.id, setting_id, uploads)
+                copy_setting(session, setting_id, user.id, image_storage, storage_changes)
+            else:
+                owns_setting = setting.owner_id == user.id
+                if ("save" in form or "save_run" in form) and not owns_setting:
+                    raise HTTPException(status_code=403, detail="Only the owner can edit a setting")
+                if "save" in form or "save_run" in form:
+                    await update_setting_from_form(
+                        session,
+                        setting_id,
+                        form,
+                        app_settings,
+                        image_storage,
+                        storage_changes,
+                    )
+                    flash(request, f'Setting change successful with name "{form.get("set_name")}"', "success")
+                if "run" in form or "save_run" in form:
+                    uploads = [value for value in form.getlist("Process_files") if isinstance(value, UploadFile)]
+                    await create_job(session, app_settings, user.id, setting_id, uploads)
+        session.commit()
+        database_committed = True
+        storage_changes.database_committed()
         return redirect(request, "my_settings")
     except ValidationError as exc:
+        session.rollback()
+        storage_changes.database_rolled_back()
         flash(request, str(exc))
         refreshed = get_setting(session, setting_id) or setting
         return render(
@@ -304,6 +341,11 @@ async def setting_submit(
             setting=refreshed,
             allowed_extensions=sorted(ALLOWED_EXTENSIONS),
         )
+    except Exception:
+        if not database_committed:
+            session.rollback()
+            storage_changes.database_rolled_back()
+        raise
 
 
 @router.post("/terminate", name="terminate")

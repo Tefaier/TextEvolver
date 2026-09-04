@@ -4,8 +4,16 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from text_evolver.db.models import Fandom, ImageConversion, PhraseConversion, Setting, UnitConversion
+from text_evolver.db.models import (
+    Fandom,
+    ImageConversion,
+    ImageConversionFile,
+    PhraseConversion,
+    Setting,
+    UnitConversion,
+)
 from text_evolver.fandoms import FandomName
+from text_evolver.image_storage import ImageStorage
 from text_evolver.processing.pokemon_cache import PokemonRecord, load_pokemon_cache
 from text_evolver.processing.text_analysis import ReplaceRules
 
@@ -27,9 +35,11 @@ def load_processing_configuration(
     session: Session,
     setting_id: int,
     temp_root: Path | None = None,
+    image_directory: Path | None = None,
+    image_storage: ImageStorage | None = None,
 ) -> ProcessingConfiguration:
     '''Reads settings tables to collect setting object fully'''
-    setting = session.get(Setting, setting_id)
+    setting = session.scalar(select(Setting).where(Setting.id == setting_id).with_for_update(read=True))
     if setting is None:
         raise LookupError(f"Setting {setting_id} does not exist")
     fandoms = tuple(session.scalars(select(Fandom).where(Fandom.setting_id == setting_id).order_by(Fandom.id)))
@@ -39,9 +49,27 @@ def load_processing_configuration(
     phrases = session.scalars(
         select(PhraseConversion).where(PhraseConversion.setting_id == setting_id).order_by(PhraseConversion.id)
     )
-    images = session.scalars(
+    images = tuple(session.scalars(
         select(ImageConversion).where(ImageConversion.setting_id == setting_id).order_by(ImageConversion.id)
+    ))
+    image_files = tuple(
+        session.scalars(
+            select(ImageConversionFile)
+            .join(ImageConversion, ImageConversion.id == ImageConversionFile.image_conversion_id)
+            .where(ImageConversion.setting_id == setting_id)
+            .order_by(ImageConversionFile.image_conversion_id, ImageConversionFile.position)
+        )
     )
+    if image_files and (image_directory is None or image_storage is None):
+        raise ValueError("Image storage and a job image directory are required")
+    staged_files: dict[int, list[Path]] = {}
+    for image_file in image_files:
+        suffix = Path(image_file.object_key).suffix
+        destination = image_directory / f"{image_file.id}{suffix}"  # type: ignore[operator]
+        image_storage.download(image_file.object_key, destination)  # type: ignore[union-attr]
+        staged_files.setdefault(image_file.image_conversion_id, []).append(destination)
+    if any(not staged_files.get(value.id) for value in images):
+        raise LookupError("An image conversion has no stored images")
     return ProcessingConfiguration(
         use_comma_separator=setting.use_comma_separator,
         expect_feet=setting.expect_feet,
@@ -82,7 +110,7 @@ def load_processing_configuration(
                 "separation": value.separation,
                 "explanation": value.explanation,
                 "mutations": value.mutations,
-                "images": value.images,
+                "image_paths": tuple(staged_files.get(value.id, ())),
             }
             for value in images
         ),
@@ -134,7 +162,7 @@ def configure_process_unit(unit: object, configuration: ProcessingConfiguration)
             can_be_word=True,
         )
     for value in configuration.images:
-        binaries = str(value["images"]).split("*")
+        image_paths = list(value["image_paths"])
         if value["phrase"] in unit.pokemons_list:
             item = unit.pokemons_list[value["phrase"]]
             item.update(
@@ -143,14 +171,14 @@ def configure_process_unit(unit: object, configuration: ProcessingConfiguration)
                     "explanation": value["explanation"],
                 }
             )
-            item["binary"].extend(binaries)
+            item["binary"].extend(image_paths)
         else:
             unit.extra_img_list[value["phrase"]] = {
                 "split": str(value["phrase"]).split(" "),
                 "separation": value["separation"],
                 "last word": None,
                 "mutation": value["mutations"],
-                "binary": binaries,
+                "binary": image_paths,
                 "explanation": value["explanation"],
             }
     for value in configuration.phrases:

@@ -1,10 +1,11 @@
 import threading
 from contextlib import contextmanager
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 
 import text_evolver.worker as worker
-from text_evolver.db.models import ProcessingJob, Setting, UserAccount
+from text_evolver.db.models import ImageConversion, ImageConversionFile, ProcessingJob, Setting, UserAccount
 from text_evolver.services import job_paths, request_job_cancellation
 
 
@@ -56,6 +57,91 @@ def test_worker_claims_and_completes_a_document(monkeypatch, database, app_setti
         assert job.status == "completed"
         assert job.finished_at is not None
     assert (output / "book.html").exists()
+    assert not worker.job_temp_path(app_settings, job_id).exists()
+
+
+def create_job_with_image(database, object_key: str) -> int:
+    with Session(database) as session:
+        user = UserAccount(username=f"image-worker-{object_key}")
+        session.add(user)
+        session.flush()
+        setting = Setting(owner_id=user.id, name="image-setting")
+        session.add(setting)
+        session.flush()
+        conversion = ImageConversion(
+            setting_id=setting.id,
+            phrase="trigger",
+            separation=1,
+            explanation="",
+            mutations=False,
+        )
+        session.add(conversion)
+        session.flush()
+        session.add(
+            ImageConversionFile(
+                image_conversion_id=conversion.id,
+                object_key=object_key,
+                size_bytes=5,
+                position=0,
+            )
+        )
+        job = ProcessingJob(user_id=user.id, setting_id=setting.id, status="queued")
+        session.add(job)
+        session.commit()
+        return job.id
+
+
+def test_worker_downloads_images_into_the_job_temp_directory(
+    monkeypatch, database, app_settings, image_storage
+):
+    install_worker_database(monkeypatch, database, app_settings)
+    object_key = "users/1/settings/1/image.png"
+    image_storage.objects[object_key] = b"image"
+    job_id = create_job_with_image(database, object_key)
+    claimed = worker.claim_job()
+    assert claimed is not None
+
+    configuration = worker.load_configuration(claimed, app_settings, image_storage)
+
+    image_paths = configuration.images[0]["image_paths"]
+    assert len(image_paths) == 1
+    staged = image_paths[0]
+    assert isinstance(staged, Path)
+    assert staged.parent == worker.job_temp_path(app_settings, job_id) / "images"
+    assert staged.read_bytes() == b"image"
+
+
+def test_worker_cleans_staging_after_image_download_failure(
+    monkeypatch, database, app_settings, image_storage
+):
+    install_worker_database(monkeypatch, database, app_settings)
+    job_id = create_job_with_image(database, "users/1/settings/1/missing.png")
+    claimed = worker.claim_job()
+    assert claimed is not None
+
+    worker.run_claimed_job(claimed, app_settings, image_storage)
+
+    with Session(database) as session:
+        job = session.get(ProcessingJob, job_id)
+        assert job is not None
+        assert job.status == "failed"
+    assert not worker.job_temp_path(app_settings, job_id).exists()
+
+
+def test_worker_startup_cleanup_preserves_pokemon_cache(app_settings):
+    abandoned = worker.job_temp_path(app_settings, 99)
+    abandoned.mkdir(parents=True)
+    (abandoned / "image.png").write_bytes(b"image")
+    pokemon_cache = app_settings.temp_root / "Pokemons" / "images"
+    pokemon_cache.mkdir(parents=True)
+    pokemon_image = pokemon_cache / "pikachu.png"
+    pokemon_image.write_bytes(b"pokemon")
+
+    worker.cleanup_stale_job_directories(app_settings)
+
+    assert not abandoned.exists()
+    assert (app_settings.temp_root / "jobs").is_dir()
+    assert pokemon_image.read_bytes() == b"pokemon"
 
 
 def test_queued_cancellation_and_restart_recovery(monkeypatch, database, app_settings):

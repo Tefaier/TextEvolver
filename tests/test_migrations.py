@@ -21,6 +21,7 @@ def test_sqlite_flyway_baseline_is_fresh_and_complete(tmp_path: Path):
         "unit_conversion",
         "phrase_conversion",
         "image_conversion",
+        "image_conversion_file",
         "processing_job",
     }
     indexes = {row[0] for row in database.execute("SELECT name FROM sqlite_master WHERE type = 'index'")}
@@ -31,6 +32,10 @@ def test_sqlite_flyway_baseline_is_fresh_and_complete(tmp_path: Path):
     }
     assert phrase_columns["regex"][3] == 1
     assert phrase_columns["regex"][4].upper() == "FALSE"
+    image_file_foreign_key = database.execute("PRAGMA foreign_key_list(image_conversion_file)").fetchone()
+    assert image_file_foreign_key is not None
+    assert image_file_foreign_key[2] == "image_conversion"
+    assert image_file_foreign_key[6].upper() == "CASCADE"
     for table in tables:
         id_column = next(column for column in database.execute(f"PRAGMA table_info({table})") if column[1] == "id")
         assert id_column[3] == 1
@@ -46,6 +51,7 @@ def test_postgresql_and_sqlite_baselines_declare_the_same_tables():
         "unit_conversion",
         "phrase_conversion",
         "image_conversion",
+        "image_conversion_file",
         "processing_job",
     }
     for dialect in ("postgresql", "sqlite"):
@@ -68,7 +74,7 @@ def test_sqlalchemy_model_generation_is_deterministic(tmp_path: Path):
     outputs = [tmp_path / "models-one.py", tmp_path / "models-two.py"]
     tables = (
         "user_account,user_password,setting,fandom,unit_conversion,"
-        "phrase_conversion,image_conversion,processing_job"
+        "phrase_conversion,image_conversion,image_conversion_file,processing_job"
     )
     sqlacodegen = str(Path(sys.executable).with_name("sqlacodegen"))
     for output in outputs:

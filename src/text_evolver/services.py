@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import base64
 import datetime as dt
 import re
+from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -15,6 +15,7 @@ from text_evolver.config import AppSettings
 from text_evolver.db.models import (
     Fandom,
     ImageConversion,
+    ImageConversionFile,
     PhraseConversion,
     ProcessingJob,
     Setting,
@@ -22,12 +23,12 @@ from text_evolver.db.models import (
     UserAccount,
 )
 from text_evolver.fandoms import FandomName
+from text_evolver.image_storage import ImageStorage, ImageStorageChanges, ImageStorageError
 
 ALLOWED_EXTENSIONS = {"docx", "epub", "html", "fb2"}
 ACTIVE_JOB_STATUSES = {"queued", "running"}
 TRUTHY = {"true", "1", "yes", "on"}
 FALSY = {"false", "0", "no", "off"}
-IMAGE_UPLOAD_CHUNK_BYTES = 1024 * 1024
 IMAGE_UPLOAD_FIELD_PREFIX = "image_files_"
 IMAGE_ROW_TOKEN_PATTERN = re.compile(r"[a-zA-Z0-9_-]{1,80}")
 
@@ -146,7 +147,14 @@ def create_default_setting(session: Session, user_id: int) -> Setting:
     return setting
 
 
-def copy_setting(session: Session, source_id: int, user_id: int) -> Setting:
+def copy_setting(
+    session: Session,
+    source_id: int,
+    user_id: int,
+    storage: ImageStorage,
+    storage_changes: ImageStorageChanges,
+) -> Setting:
+    session.scalar(select(Setting.id).where(Setting.id == source_id).with_for_update(read=True))
     source = get_setting(session, source_id)
     if source is None:
         raise ValidationError("Setting not found")
@@ -199,19 +207,32 @@ def copy_setting(session: Session, source_id: int, user_id: int) -> Setting:
             for value in source.phrase_convs
         ]
     )
-    session.add_all(
-        [
-            ImageConversion(
-                setting_id=copied.id,
-                phrase=value.phrase,
-                separation=value.separation,
-                explanation=value.explanation,
-                mutations=value.mutations,
-                images=value.images,
+    source_files = _image_files_by_conversion(session, source_id)
+    for value in source.image_convs:
+        copied_conversion = ImageConversion(
+            setting_id=copied.id,
+            phrase=value.phrase,
+            separation=value.separation,
+            explanation=value.explanation,
+            mutations=value.mutations,
+        )
+        session.add(copied_conversion)
+        session.flush()
+        for image_file in source_files[value.id]:
+            object_key = storage.object_key(user_id, copied.id, image_file.object_key)
+            try:
+                storage.copy(image_file.object_key, object_key)
+            except ImageStorageError as exc:
+                raise ValidationError("Unable to copy setting images") from exc
+            storage_changes.created_object(object_key)
+            session.add(
+                ImageConversionFile(
+                    image_conversion_id=copied_conversion.id,
+                    object_key=object_key,
+                    size_bytes=image_file.size_bytes,
+                    position=image_file.position,
+                )
             )
-            for value in source.image_convs
-        ]
-    )
     return copied
 
 
@@ -263,7 +284,7 @@ class ImageSubmission:
     separation: int
     explanation: str
     mutations: bool
-    existing_images: str
+    existing_conversion_id: int | None
     uploads: tuple[UploadFile, ...]
 
 
@@ -305,30 +326,9 @@ def _upload_size(upload: UploadFile) -> int:
     return upload.size
 
 
-def _encoded_images_size(images: str) -> int:
-    """Estimation of decoded images size"""
-    return len(images) // 4 * 3
-
-
-async def _read_upload_with_limit(upload: UploadFile, available_bytes: int) -> bytes:
-    """Read a known-size upload in bounded chunks without crossing the available byte budget."""
-    expected_size = _upload_size(upload)
-    if expected_size > available_bytes:
-        raise ValidationError("Images exceed the configured setting size limit")
-    await upload.seek(0)
-    output = bytearray()
-    while len(output) < expected_size:
-        read_size = min(IMAGE_UPLOAD_CHUNK_BYTES, expected_size - len(output), available_bytes - len(output))
-        if read_size <= 0:
-            raise ValidationError("Images exceed the configured setting size limit")
-        chunk = await upload.read(read_size)
-        if not chunk:
-            raise ValidationError(f"Uploaded image '{upload.filename}' could not be read completely")
-        output.extend(chunk)
-    return bytes(output)
-
-
-def _parse_image_submissions(form: Any, old_images: dict[str, str]) -> list[ImageSubmission]:
+def _parse_image_submissions(
+    form: Any, existing_by_token: dict[str, ImageConversion]
+) -> list[ImageSubmission]:
     tokens, phrases, separations, explanations, image_mutations = _aligned(
         form, ["image_token", "image_phrase", "image_separation", "image_expl", "image_mutations"]
     )
@@ -347,8 +347,8 @@ def _parse_image_submissions(form: Any, old_images: dict[str, str]) -> list[Imag
             for value in _values(form, IMAGE_UPLOAD_FIELD_PREFIX + token)
             if isinstance(value, UploadFile) and value.filename
         )
-        existing_image_data = old_images.get(token, "")
-        if not uploads and not existing_image_data:
+        existing = existing_by_token.get(token)
+        if not uploads and existing is None:
             raise ValidationError(f"Image conversion '{phrase}' requires an image")
         submissions.append(
             ImageSubmission(
@@ -356,54 +356,94 @@ def _parse_image_submissions(form: Any, old_images: dict[str, str]) -> list[Imag
                 separation=max(1, int(separations[index])),
                 explanation=str(explanations[index]),
                 mutations=parse_bool(image_mutations[index], "image_mutations"),
-                existing_images=existing_image_data,
+                existing_conversion_id=existing.id if existing is not None else None,
                 uploads=uploads,
             )
         )
     return submissions
 
 
-async def _materialize_image_submissions(
-    submissions: list[ImageSubmission], setting_limit_bytes: int
-) -> list[dict[str, Any]]:
+def _validate_image_submission_size(
+    submissions: list[ImageSubmission],
+    files_by_conversion: dict[int, list[ImageConversionFile]],
+    setting_limit_bytes: int,
+) -> None:
+    if any(
+        not value.uploads
+        and value.existing_conversion_id is not None
+        and not files_by_conversion[value.existing_conversion_id]
+        for value in submissions
+    ):
+        raise ValidationError("An image conversion has no stored images")
     reused_image_bytes = sum(
-        _encoded_images_size(value.existing_images) for value in submissions if not value.uploads
+        sum(image_file.size_bytes for image_file in files_by_conversion[value.existing_conversion_id])
+        for value in submissions
+        if not value.uploads and value.existing_conversion_id is not None
     )
     expected_upload_bytes = sum(_upload_size(upload) for value in submissions for upload in value.uploads)
     if reused_image_bytes + expected_upload_bytes > setting_limit_bytes:
         raise ValidationError("Images exceed the configured setting size limit")
 
-    submitted_images: list[dict[str, Any]] = []
-    uploaded_image_bytes = 0
-    upload_budget = setting_limit_bytes - reused_image_bytes
-    for value in submissions:
-        images = value.existing_images
-        if value.uploads:
-            encoded_images: list[str] = []
-            for upload in value.uploads:
-                data = await _read_upload_with_limit(
-                    upload,
-                    upload_budget - uploaded_image_bytes,
-                )
-                uploaded_image_bytes += len(data)
-                encoded_images.append(base64.b64encode(data).decode("ascii"))
-            images = "*".join(encoded_images)
-        submitted_images.append(
-            {
-                "phrase": value.phrase,
-                "separation": value.separation,
-                "explanation": value.explanation,
-                "mutations": value.mutations,
-                "images": images,
-            }
+
+def _image_files_by_conversion(
+    session: Session, setting_id: int
+) -> dict[int, list[ImageConversionFile]]:
+    files = session.scalars(
+        select(ImageConversionFile)
+        .join(ImageConversion, ImageConversion.id == ImageConversionFile.image_conversion_id)
+        .where(ImageConversion.setting_id == setting_id)
+        .order_by(ImageConversionFile.image_conversion_id, ImageConversionFile.position)
+    )
+    grouped: defaultdict[int, list[ImageConversionFile]] = defaultdict(list)
+    for image_file in files:
+        grouped[image_file.image_conversion_id].append(image_file)
+    return grouped
+
+
+def setting_image_object_keys(session: Session, setting_id: int) -> tuple[str, ...]:
+    return tuple(
+        session.scalars(
+            select(ImageConversionFile.object_key)
+            .join(ImageConversion, ImageConversion.id == ImageConversionFile.image_conversion_id)
+            .where(ImageConversion.setting_id == setting_id)
         )
-    return submitted_images
+    )
+
+
+def _upload_conversion_files(
+    session: Session,
+    setting: Setting,
+    conversion: ImageConversion,
+    uploads: tuple[UploadFile, ...],
+    storage: ImageStorage,
+    storage_changes: ImageStorageChanges,
+) -> None:
+    for position, upload in enumerate(uploads):
+        object_key = storage.object_key(setting.owner_id, setting.id, upload.filename)
+        try:
+            storage.upload(upload.file, object_key)
+        except ImageStorageError as exc:
+            raise ValidationError("Unable to store setting images") from exc
+        storage_changes.created_object(object_key)
+        session.add(
+            ImageConversionFile(
+                image_conversion_id=conversion.id,
+                object_key=object_key,
+                size_bytes=_upload_size(upload),
+                position=position,
+            )
+        )
 
 
 async def update_setting_from_form(
-    session: Session, setting_id: int, form: Any, settings: AppSettings
+    session: Session,
+    setting_id: int,
+    form: Any,
+    settings: AppSettings,
+    storage: ImageStorage,
+    storage_changes: ImageStorageChanges,
 ) -> None:
-    setting = session.get(Setting, setting_id)
+    setting = session.get(Setting, setting_id, with_for_update=True)
     if setting is None:
         raise ValidationError("Setting not found")
     name = str(form.get("set_name", "")).strip()
@@ -435,7 +475,8 @@ async def update_setting_from_form(
             select(ImageConversion).where(ImageConversion.setting_id == setting_id).order_by(ImageConversion.id)
         )
     )
-    old_images = {f"existing-{value.id}": value.images for value in existing_images}
+    existing_images_by_token = {f"existing-{value.id}": value for value in existing_images}
+    files_by_conversion = _image_files_by_conversion(session, setting_id)
 
     fandom, active, separation, value_1, value_2 = _aligned(
         form, ["fandom", "fandom_active", "fandom_separation", "fandom_value_1", "fandom_value_2"]
@@ -494,8 +535,8 @@ async def update_setting_from_form(
                 }
             )
 
-    image_submissions = _parse_image_submissions(form, old_images)
-    submitted_images = await _materialize_image_submissions(image_submissions, settings.setting_limit_bytes)
+    image_submissions = _parse_image_submissions(form, existing_images_by_token)
+    _validate_image_submission_size(image_submissions, files_by_conversion, settings.setting_limit_bytes)
 
     row_changes = (
         (
@@ -522,17 +563,52 @@ async def update_setting_from_form(
                 ("phrase_from", "phrase_to", "direct", "mutations", "regex"),
             ),
         ),
-        (
-            ImageConversion,
-            _calculate_row_changes(
-                existing_images,
-                submitted_images,
-                ("phrase", "separation", "explanation", "mutations", "images"),
-            ),
-        ),
     )
     for model, changes in row_changes:
         _apply_relation_changes(session, setting_id, model, changes)
+
+    retained_conversion_ids: set[int] = set()
+    for submission in image_submissions:
+        if submission.existing_conversion_id is None:
+            conversion_row = ImageConversion(
+                setting_id=setting_id,
+                phrase=submission.phrase,
+                separation=submission.separation,
+                explanation=submission.explanation,
+                mutations=submission.mutations,
+            )
+            session.add(conversion_row)
+            session.flush()
+        else:
+            conversion_row = next(
+                value for value in existing_images if value.id == submission.existing_conversion_id
+            )
+            retained_conversion_ids.add(conversion_row.id)
+            conversion_row.phrase = submission.phrase
+            conversion_row.separation = submission.separation
+            conversion_row.explanation = submission.explanation
+            conversion_row.mutations = submission.mutations
+        if submission.uploads:
+            for image_file in files_by_conversion[conversion_row.id]:
+                storage_changes.obsolete_object(image_file.object_key)
+                session.delete(image_file)
+            session.flush()
+            _upload_conversion_files(
+                session,
+                setting,
+                conversion_row,
+                submission.uploads,
+                storage,
+                storage_changes,
+            )
+
+    for conversion_row in existing_images:
+        if conversion_row.id in retained_conversion_ids:
+            continue
+        for image_file in files_by_conversion[conversion_row.id]:
+            storage_changes.obsolete_object(image_file.object_key)
+            session.delete(image_file)
+        session.delete(conversion_row)
     session.flush()
 
 

@@ -3,12 +3,14 @@
 TextEvolver is a FastAPI web application that applies configurable unit and
 phrase conversions and image insertion rules to DOCX, EPUB, HTML, and FB2
 documents. The browser UI submits jobs to PostgreSQL; a separate worker reads
-the queue and writes processed files to a shared work volume.
+the queue and writes processed files to a shared work volume. User-provided
+setting images live in MinIO and are staged locally when a job starts.
 
 ## Requirements
 
 - Python 3.12 for local development
 - PostgreSQL 17 and PgBouncer, or a Compose-compatible container runtime
+- Podman with Podman Compose for the local MinIO object-store container
 - Flyway 11 with PostgreSQL and SQLite support for manual migration work
 - Chromium for Pokémon image scraping
 
@@ -23,6 +25,8 @@ cp .env.example .env
 Set a random `SECRET_KEY`, database credentials, and `DATABASE_URL` in `.env`.
 Generate the initial AES-256-GCM password key with `openssl rand -base64 32`,
 store it as `PASSWORD_KEY_CURRENT`, and set `PASSWORD_KEY_CURRENT_VERSION=1`.
+Set unique `S3_ACCESS_KEY` and `S3_SECRET_KEY` values as well. Processes running
+directly on the host use `S3_ENDPOINT_URL=http://localhost:9000`.
 The application has no SQLite runtime fallback. Start the web process and the
 worker separately:
 
@@ -75,17 +79,34 @@ Initialize local environment values and start the stack:
 
 ```bash
 cp .env.example .env
-docker compose up --build
+podman compose up --build
 ```
 
-`podman compose up --build` can be used when a Compose provider is configured.
 The stack contains PostgreSQL, PgBouncer, a one-shot Flyway migration service,
-the FastAPI server, and one worker. PostgreSQL is not published to the host;
+MinIO, a one-shot MinIO bucket initializer, the FastAPI server, and one worker.
+PostgreSQL is not published to the host;
 host and application connections go through PgBouncer on port 6432. Flyway is
-the only service that connects directly to PostgreSQL.
+the only service that connects directly to PostgreSQL. App and worker contact
+MinIO at `http://minio:9000`; only MinIO mounts `user-data` at `/data`.
 
 Open <http://localhost:8000>. Health endpoints are available at
 `/health/live` and `/health/ready`.
+
+MinIO publishes its S3 endpoint at <http://localhost:9000> and management
+console at <http://localhost:9001>. The initializer creates `S3_BUCKET`
+idempotently after MinIO becomes healthy.
+
+### User image storage
+
+Uploaded setting images are independent S3 objects. PostgreSQL stores only
+their keys, sizes, and ordering. Replacements and deletions remove superseded
+objects after the database commit; a rollback removes newly uploaded objects.
+Copying a setting creates independent objects for the copy.
+
+At job start the worker downloads referenced images to
+`TEMP_ROOT/jobs/<job_id>/images`. Processing uses those local paths, and the
+worker removes the directory on every completion path. This does not affect the
+Pokémon cache under `TEMP_ROOT/Pokemons`.
 
 ### Pokémon cache
 
@@ -103,13 +124,14 @@ saved images; they do not start Selenium or make Pokémon network requests.
 Stop containers while retaining data:
 
 ```bash
-docker compose down
+podman compose down
 ```
 
-Delete local database and work volumes and return to a fresh V1 database:
+Delete all local volumes, including MinIO's `user-data`, and return to a fresh
+V1 deployment:
 
 ```bash
-docker compose down --volumes
+podman compose down --volumes
 ```
 
 This last command permanently removes the Compose-managed local data.
@@ -122,9 +144,9 @@ This last command permanently removes the Compose-managed local data.
 ```
 
 The suite covers the Flyway SQLite baseline, schema parity, authentication,
-CSRF, settings and upload flows, text analysis, all four document formats, and
-incremental Pokémon cache behavior. Pokémon/Selenium network access is mocked
-in deterministic tests.
+CSRF, S3-backed setting-image flows, text analysis, all four document formats,
+and incremental Pokémon cache behavior. S3 and Pokémon/Selenium network access
+are mocked in deterministic tests; no MinIO smoke test is included.
 
 ## Important environment variables
 
@@ -138,6 +160,14 @@ in deterministic tests.
 | `PASSWORD_KEY_PREVIOUS_VERSION` | Previous key's version; must be set together with its key |
 | `WORK_ROOT` | Shared job input/output directory |
 | `TEMP_ROOT` | Temporary processing directory |
+| `S3_ENDPOINT_URL` | S3-compatible endpoint; host processes use `http://localhost:9000` |
+| `S3_BUCKET` | Bucket containing user-provided setting images |
+| `S3_REGION` | S3 signing region; local MinIO defaults to `us-east-1` |
+| `S3_ACCESS_KEY` | S3 access key and local MinIO root username |
+| `S3_SECRET_KEY` | S3 secret key and local MinIO root password |
+| `S3_FORCE_PATH_STYLE` | Enables path-style addressing for MinIO |
+| `MINIO_API_PORT` | Host port for the MinIO S3 endpoint |
+| `MINIO_CONSOLE_PORT` | Host port for the MinIO management console |
 | `CHROME_BINARY` | Optional Chromium executable override |
 | `COOKIE_SECURE` | Enables HTTPS-only session cookies |
 | `UPLOAD_LIMIT_BYTES` | Total upload limit per job |

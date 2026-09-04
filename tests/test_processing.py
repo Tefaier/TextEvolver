@@ -443,7 +443,7 @@ def test_image_separation_state_resets_for_each_document(monkeypatch, tmp_path: 
                 "separation": 1,
                 "explanation": "",
                 "mutations": False,
-                "images": "aW1hZ2U=",
+                "image_paths": (tmp_path / "trigger.png",),
             },
         ),
     )
@@ -460,7 +460,7 @@ def test_image_separation_state_resets_for_each_document(monkeypatch, tmp_path: 
         assert (output / filename).read_text(encoding="utf-8") == expected
 
 
-def test_image_trigger_pattern_is_precompiled_and_escapes_phrases():
+def test_image_trigger_pattern_is_precompiled_and_escapes_phrases(tmp_path: Path):
     process_unit = processor.ProcessUnit(
         configuration(
             phrases=(),
@@ -470,7 +470,7 @@ def test_image_trigger_pattern_is_precompiled_and_escapes_phrases():
                     "separation": 1,
                     "explanation": "",
                     "mutations": False,
-                    "images": "aW1hZ2U=",
+                    "image_paths": (tmp_path / "trigger.png",),
                 },
             ),
         )

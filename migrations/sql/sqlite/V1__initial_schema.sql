@@ -65,10 +65,20 @@ CREATE TABLE image_conversion (
     phrase VARCHAR(64) NOT NULL,
     separation INTEGER NOT NULL DEFAULT 1,
     explanation VARCHAR(64) NOT NULL,
-    mutations BOOLEAN NOT NULL DEFAULT FALSE,
-    images TEXT NOT NULL
+    mutations BOOLEAN NOT NULL DEFAULT FALSE
 );
 CREATE INDEX ix_image_conversion_setting_id ON image_conversion(setting_id);
+
+CREATE TABLE image_conversion_file (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    image_conversion_id INTEGER NOT NULL REFERENCES image_conversion(id) ON DELETE CASCADE,
+    object_key VARCHAR(512) NOT NULL,
+    size_bytes INTEGER NOT NULL CHECK (size_bytes > 0),
+    position INTEGER NOT NULL CHECK (position >= 0),
+    CONSTRAINT uq_image_conversion_file_object_key UNIQUE (object_key),
+    CONSTRAINT uq_image_conversion_file_position UNIQUE (image_conversion_id, position)
+);
+CREATE INDEX ix_image_conversion_file_conversion_id ON image_conversion_file(image_conversion_id);
 
 CREATE TABLE processing_job (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,

@@ -8,6 +8,7 @@ import signal
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from pathlib import Path
 
 import psutil
 from sqlalchemy import select, update
@@ -15,6 +16,7 @@ from sqlalchemy import select, update
 from text_evolver.config import AppSettings, get_application_settings
 from text_evolver.db.models import ProcessingJob
 from text_evolver.db.session import session_scope
+from text_evolver.image_storage import ImageStorage, get_image_storage
 from text_evolver.processing.pokemon_cache import refresh_pokemon_cache
 from text_evolver.processing.process_config_builder import ProcessingConfiguration, load_processing_configuration
 from text_evolver.processing.processor import process_files
@@ -73,9 +75,29 @@ def claim_job() -> ClaimedJob | None:
         return ClaimedJob(job.id, job.setting_id)
 
 
-def load_configuration(setting_id: int, settings: AppSettings) -> ProcessingConfiguration:
+def job_temp_path(settings: AppSettings, job_id: int) -> Path:
+    return settings.temp_root / "jobs" / str(job_id)
+
+
+def cleanup_stale_job_directories(settings: AppSettings) -> None:
+    jobs_root = settings.temp_root / "jobs"
+    shutil.rmtree(jobs_root, ignore_errors=True)
+    jobs_root.mkdir(parents=True, exist_ok=True)
+
+
+def load_configuration(
+    job: ClaimedJob,
+    settings: AppSettings,
+    image_storage: ImageStorage,
+) -> ProcessingConfiguration:
     with session_scope() as session:
-        return load_processing_configuration(session, setting_id, settings.temp_root)
+        return load_processing_configuration(
+            session,
+            job.setting_id,
+            settings.temp_root,
+            job_temp_path(settings, job.id) / "images",
+            image_storage,
+        )
 
 
 def cancellation_requested(job_id: int) -> bool:
@@ -98,40 +120,50 @@ def finish_job(job_id: int, status: str, error: str | None = None) -> None:
         job.error_message = error[:4000] if error else None
 
 
-def run_claimed_job(job: ClaimedJob, settings: AppSettings | None = None) -> None:
+def run_claimed_job(
+    job: ClaimedJob,
+    settings: AppSettings | None = None,
+    image_storage: ImageStorage | None = None,
+) -> None:
     settings = settings or get_application_settings()
+    image_storage = image_storage or get_image_storage()
     root, origin, output = job_paths(settings, job.id)
+    staging_root = job_temp_path(settings, job.id)
+    shutil.rmtree(staging_root, ignore_errors=True)
     try:
-        configuration = load_configuration(job.setting_id, settings)
-    except Exception as exc:
-        LOGGER.exception("Unable to load settings for job %s", job.id)
-        finish_job(job.id, "failed", str(exc))
-        return
+        try:
+            configuration = load_configuration(job, settings, image_storage)
+        except Exception as exc:
+            LOGGER.exception("Unable to load settings for job %s", job.id)
+            finish_job(job.id, "failed", str(exc))
+            return
 
-    process = PROCESS_CONTEXT.Process(
-        target=process_files,
-        args=(configuration, origin, output),
-        name=f"text-evolver-job-{job.id}",
-    )
-    process.start()
-    cancelled = False
-    while process.is_alive():
-        process.join(timeout=settings.worker_cancel_poll_seconds)
-        if process.is_alive() and cancellation_requested(job.id):
-            cancelled = True
-            process.terminate()
-            process.join(timeout=10)
-            if process.is_alive():
-                process.kill()
-                process.join()
-    if cancelled:
-        finish_job(job.id, "cancelled")
-        shutil.rmtree(root, ignore_errors=True)
-    elif process.exitcode == 0:
-        finish_job(job.id, "completed")
-    else:
-        finish_job(job.id, "failed", f"Processing subprocess exited with code {process.exitcode}")
-        shutil.rmtree(root, ignore_errors=True)
+        process = PROCESS_CONTEXT.Process(
+            target=process_files,
+            args=(configuration, origin, output),
+            name=f"text-evolver-job-{job.id}",
+        )
+        process.start()
+        cancelled = False
+        while process.is_alive():
+            process.join(timeout=settings.worker_cancel_poll_seconds)
+            if process.is_alive() and cancellation_requested(job.id):
+                cancelled = True
+                process.terminate()
+                process.join(timeout=10)
+                if process.is_alive():
+                    process.kill()
+                    process.join()
+        if cancelled:
+            finish_job(job.id, "cancelled")
+            shutil.rmtree(root, ignore_errors=True)
+        elif process.exitcode == 0:
+            finish_job(job.id, "completed")
+        else:
+            finish_job(job.id, "failed", f"Processing subprocess exited with code {process.exitcode}")
+            shutil.rmtree(root, ignore_errors=True)
+    finally:
+        shutil.rmtree(staging_root, ignore_errors=True)
 
 
 def run_worker_slot(slot: int, settings: AppSettings, stopping: threading.Event) -> None:
@@ -186,6 +218,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     settings = get_application_settings()
     settings.ensure_directories()
+    cleanup_stale_job_directories(settings)
     recovered = recover_interrupted_jobs()
     if recovered:
         LOGGER.warning("Returned %s interrupted job(s) to the queue", recovered)

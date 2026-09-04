@@ -21,7 +21,7 @@ python3.12 -m venv .venv
 ./migrations/generate_models.sh
 .venv/bin/python migrations/upgrade_cipher_version.py --batch-size 100
 podman build -t text-evolver:local .
-docker compose up --build
+podman compose up --build
 ```
 
 ## Source layout
@@ -44,15 +44,22 @@ docker compose up --build
 
 ## Runtime architecture
 
-Compose runs PostgreSQL, PgBouncer, Flyway, FastAPI, and one worker. The API and
+Compose runs PostgreSQL, PgBouncer, Flyway, MinIO, FastAPI, and one worker. The API and
 worker use psycopg through PgBouncer transaction pooling; Flyway connects
 directly to PostgreSQL. SQLAlchemy uses `NullPool` and disables psycopg prepared
 statements because PgBouncer owns pooling.
 
+User-provided setting images are S3 objects accessed through `boto3`. Only the
+dedicated MinIO container mounts `user-data` at `/data`; app and worker use the
+S3 API. PostgreSQL stores ordered object keys and byte sizes, not Base64 image
+payloads. Copies own independent objects. Delete superseded objects only after
+the database commit and delete newly created objects after rollback.
+
 The API saves uploads under `WORK_ROOT/<job_id>/origin_files` and inserts a
 `processing_job` row. Each of the worker's `WORKER_CONCURRENCY` thread-pool
 slots atomically claims a queued row, loads a plain processing configuration,
-and spawns a child for document processing. The API requests cancellation in
+downloads its images into `TEMP_ROOT/jobs/<job_id>/images`, and spawns a child
+that processes only those local paths. The API requests cancellation in
 the database; only the owning worker slot terminates its child. Completed
 output is stored in `new_files` until the user downloads it.
 
@@ -84,7 +91,8 @@ metadata creation or restore Alembic/Flask-Migrate.
 
 Configuration is defined in `src/text_evolver/config.py` and loaded from
 environment variables. `DATABASE_URL`, `SECRET_KEY`,
-`PASSWORD_KEY_CURRENT`, and `PASSWORD_KEY_CURRENT_VERSION` are required. Root
+`PASSWORD_KEY_CURRENT`, `PASSWORD_KEY_CURRENT_VERSION`, `S3_ENDPOINT_URL`,
+`S3_BUCKET`, `S3_ACCESS_KEY`, and `S3_SECRET_KEY` are required. Root
 `.env` is for the app/Compose; `migrations/.env` is intentionally separate for
 manual Flyway execution. Both real files are ignored; update their example
 files when variables change.
