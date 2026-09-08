@@ -25,7 +25,7 @@ class Setting(Base):
     __tablename__ = 'setting'
     __table_args__ = (
         Index('ix_setting_owner_id', 'owner_id'),
-        Index('ix_setting_public_name', 'public', 'name')
+        Index('ix_setting_public_order', 'name', 'id')
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -51,7 +51,8 @@ class UserPassword(Base):
         CheckConstraint('key_version >= 1'),
         CheckConstraint('length(encoded_password) >= 16'),
         CheckConstraint('length(nonce) = 12'),
-        UniqueConstraint('nonce', name='uq_user_password_nonce')
+        UniqueConstraint('nonce', name='uq_user_password_nonce'),
+        Index('ix_user_password_key_version_id', 'key_version', 'id')
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -117,7 +118,8 @@ class PhraseConversion(Base):
 class ProcessingJob(Base):
     __tablename__ = 'processing_job'
     __table_args__ = (
-        Index('ix_processing_job_created_status', 'created_at', 'status'),
+        Index('ix_processing_job_queued_order', 'created_at', 'id'),
+        Index('ix_processing_job_setting_status', 'setting_id', 'status'),
         Index('ix_processing_job_user_id', 'user_id'),
         Index('ux_processing_job_active_user', 'user_id', unique=True)
     )
@@ -159,8 +161,7 @@ class ImageConversionFile(Base):
         CheckConstraint('position >= 0'),
         CheckConstraint('size_bytes > 0'),
         UniqueConstraint('image_conversion_id', 'position', name='uq_image_conversion_file_position'),
-        UniqueConstraint('object_key', name='uq_image_conversion_file_object_key'),
-        Index('ix_image_conversion_file_conversion_id', 'image_conversion_id')
+        UniqueConstraint('object_key', name='uq_image_conversion_file_object_key')
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

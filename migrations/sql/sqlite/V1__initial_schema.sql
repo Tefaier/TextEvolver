@@ -13,6 +13,7 @@ CREATE TABLE user_password (
     key_version INTEGER NOT NULL CHECK (key_version >= 1),
     CONSTRAINT uq_user_password_nonce UNIQUE (nonce)
 );
+CREATE INDEX ix_user_password_key_version_id ON user_password(key_version, id);
 
 CREATE TABLE setting (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
@@ -25,7 +26,10 @@ CREATE TABLE setting (
     expect_feet BOOLEAN NOT NULL DEFAULT FALSE
 );
 CREATE INDEX ix_setting_owner_id ON setting(owner_id);
-CREATE INDEX ix_setting_public_name ON setting(public, name);
+-- SQLite has no pg_trgm or GIN equivalent for the PostgreSQL substring-search indexes.
+CREATE INDEX ix_setting_public_order
+    ON setting(name, id)
+    WHERE public;
 
 CREATE TABLE fandom (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
@@ -78,7 +82,6 @@ CREATE TABLE image_conversion_file (
     CONSTRAINT uq_image_conversion_file_object_key UNIQUE (object_key),
     CONSTRAINT uq_image_conversion_file_position UNIQUE (image_conversion_id, position)
 );
-CREATE INDEX ix_image_conversion_file_conversion_id ON image_conversion_file(image_conversion_id);
 
 CREATE TABLE processing_job (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
@@ -93,7 +96,10 @@ CREATE TABLE processing_job (
     heartbeat_at TIMESTAMP,
     error_message TEXT
 );
-CREATE INDEX ix_processing_job_created_status ON processing_job(created_at, status);
+CREATE INDEX ix_processing_job_queued_order
+    ON processing_job(created_at, id)
+    WHERE status = 'queued';
+CREATE INDEX ix_processing_job_setting_status ON processing_job(setting_id, status);
 CREATE INDEX ix_processing_job_user_id ON processing_job(user_id);
 CREATE UNIQUE INDEX ux_processing_job_active_user ON processing_job(user_id)
     WHERE status IN ('queued', 'running');

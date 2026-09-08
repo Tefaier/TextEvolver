@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
 CREATE TABLE user_account (
     id BIGSERIAL PRIMARY KEY,
     username TEXT NOT NULL UNIQUE,
@@ -13,6 +15,7 @@ CREATE TABLE user_password (
     key_version INTEGER NOT NULL CHECK (key_version >= 1),
     CONSTRAINT uq_user_password_nonce UNIQUE (nonce)
 );
+CREATE INDEX ix_user_password_key_version_id ON user_password(key_version, id);
 
 CREATE TABLE setting (
     id BIGSERIAL PRIMARY KEY,
@@ -25,7 +28,14 @@ CREATE TABLE setting (
     expect_feet BOOLEAN NOT NULL DEFAULT FALSE
 );
 CREATE INDEX ix_setting_owner_id ON setting(owner_id);
-CREATE INDEX ix_setting_name_public ON setting(name, public);
+CREATE INDEX ix_setting_public_name_trgm
+    ON setting USING gin (name gin_trgm_ops)
+    WHERE public;
+CREATE INDEX ix_setting_name_trgm
+    ON setting USING gin (name gin_trgm_ops);
+CREATE INDEX ix_setting_public_order
+    ON setting(name, id)
+    WHERE public;
 
 CREATE TABLE fandom (
     id BIGSERIAL PRIMARY KEY,
@@ -78,7 +88,6 @@ CREATE TABLE image_conversion_file (
     CONSTRAINT uq_image_conversion_file_object_key UNIQUE (object_key),
     CONSTRAINT uq_image_conversion_file_position UNIQUE (image_conversion_id, position)
 );
-CREATE INDEX ix_image_conversion_file_conversion_id ON image_conversion_file(image_conversion_id);
 
 CREATE TABLE processing_job (
     id BIGSERIAL PRIMARY KEY,
@@ -93,7 +102,10 @@ CREATE TABLE processing_job (
     heartbeat_at TIMESTAMPTZ,
     error_message TEXT
 );
-CREATE INDEX ix_processing_job_created_status ON processing_job(created_at, status);
+CREATE INDEX ix_processing_job_queued_order
+    ON processing_job(created_at, id)
+    WHERE status = 'queued';
+CREATE INDEX ix_processing_job_setting_status ON processing_job(setting_id, status);
 CREATE INDEX ix_processing_job_user_id ON processing_job(user_id);
 CREATE UNIQUE INDEX ux_processing_job_active_user ON processing_job(user_id)
     WHERE status IN ('queued', 'running');
