@@ -13,6 +13,7 @@ from text_evolver.db.models import (
     UserAccount,
     UserPassword,
 )
+from text_evolver.services import job_paths
 from text_evolver.web.auth import encrypt_password, verify_password
 
 
@@ -218,3 +219,68 @@ def test_deleting_setting_deletes_its_stored_images(registered_client, database,
     assert object_key in image_storage.deleted
     with Session(database) as session:
         assert session.get(Setting, setting_id) is None
+
+
+def test_deleting_setting_deletes_all_non_running_jobs(
+    registered_client,
+    database,
+    app_settings,
+):
+    with Session(database) as session:
+        owner = session.scalar(select(UserAccount).where(UserAccount.username == "reader"))
+        assert owner is not None
+        setting = Setting(owner_id=owner.id, name="Delete jobs")
+        session.add(setting)
+        session.flush()
+        jobs = [
+            ProcessingJob(user_id=owner.id, setting_id=setting.id, status=job_status)
+            for job_status in ("queued", "completed", "failed", "cancelled")
+        ]
+        session.add_all(jobs)
+        session.commit()
+        setting_id = setting.id
+        job_ids = [job.id for job in jobs]
+    for job_id in job_ids:
+        root, _, _ = job_paths(app_settings, job_id)
+        root.mkdir(parents=True)
+        (root / "file.txt").write_text("job data", encoding="utf-8")
+    token = csrf_from(registered_client.get("/my_settings"))
+
+    response = registered_client.post(
+        f"/delete_set/{setting_id}",
+        data={"csrf_token": token},
+    )
+
+    assert response.status_code == 204
+    with Session(database) as session:
+        assert session.get(Setting, setting_id) is None
+        assert list(session.scalars(select(ProcessingJob).where(ProcessingJob.id.in_(job_ids)))) == []
+    for job_id in job_ids:
+        root, _, _ = job_paths(app_settings, job_id)
+        assert not root.exists()
+
+
+def test_deleting_setting_rejects_running_job(registered_client, database):
+    with Session(database) as session:
+        owner = session.scalar(select(UserAccount).where(UserAccount.username == "reader"))
+        assert owner is not None
+        setting = Setting(owner_id=owner.id, name="Running job")
+        session.add(setting)
+        session.flush()
+        job = ProcessingJob(user_id=owner.id, setting_id=setting.id, status="running")
+        session.add(job)
+        session.commit()
+        setting_id = setting.id
+        job_id = job.id
+    token = csrf_from(registered_client.get("/my_settings"))
+
+    response = registered_client.post(
+        f"/delete_set/{setting_id}",
+        data={"csrf_token": token},
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Setting is used by a running job"}
+    with Session(database) as session:
+        assert session.get(Setting, setting_id) is not None
+        assert session.get(ProcessingJob, job_id) is not None

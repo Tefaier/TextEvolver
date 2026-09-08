@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import func, select, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from starlette.datastructures import UploadFile
 
@@ -141,6 +142,16 @@ def list_user_settings(session: Session, user_id: int) -> list[SettingData]:
 def latest_job(session: Session, user_id: int) -> ProcessingJob | None:
     return session.scalar(
         select(ProcessingJob).where(ProcessingJob.user_id == user_id).order_by(ProcessingJob.created_at.desc()).limit(1)
+    )
+
+
+def lock_setting_jobs_for_deletion(session: Session, setting_id: int) -> list[ProcessingJob]:
+    return list(
+        session.scalars(
+            select(ProcessingJob)
+            .where(ProcessingJob.setting_id == setting_id)
+            .with_for_update()
+        )
     )
 
 
@@ -458,6 +469,16 @@ async def update_setting_from_form(
     setting = session.get(Setting, setting_id, with_for_update=True)
     if setting is None:
         raise ValidationError("Setting not found")
+    active_job_id = session.scalar(
+        select(ProcessingJob.id)
+        .where(
+            ProcessingJob.setting_id == setting_id,
+            ProcessingJob.status.in_(ACTIVE_JOB_STATUSES),
+        )
+        .limit(1)
+    )
+    if active_job_id is not None:
+        raise ValidationError("Cannot update a setting while its job is queued or running")
     name = _setting_text(form.get("set_name", ""), "Setting name", strip=True, required=True)
 
     setting.name = name
@@ -642,6 +663,19 @@ def _acquire_create_job_lock(session: Session, user_id: int) -> None:
         session.execute(text("SELECT pg_advisory_xact_lock(:user_id)"), {"user_id": user_id})
 
 
+def _lock_setting_for_job(session: Session, setting_id: int) -> None:
+    try:
+        locked_setting_id = session.scalar(
+            select(Setting.id).where(Setting.id == setting_id).with_for_update(read=True, nowait=True)
+        )
+    except OperationalError as exc:
+        if getattr(exc.orig, "sqlstate", None) == "55P03":
+            raise ValidationError("Setting is currently being updated") from exc
+        raise
+    if locked_setting_id is None:
+        raise ValidationError("Setting not found")
+
+
 async def create_job(
     session: Session,
     app_settings: AppSettings,
@@ -661,6 +695,7 @@ async def _create_job_in_transaction(
     setting_id: int,
     uploads: list[UploadFile],
 ) -> ProcessingJob:
+    _lock_setting_for_job(session, setting_id)
     old_jobs = list(
         session.scalars(
             select(ProcessingJob).where(

@@ -4,6 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from starlette.datastructures import FormData, UploadFile
 
@@ -12,6 +14,7 @@ from text_evolver.db.models import (
     ImageConversion,
     ImageConversionFile,
     PhraseConversion,
+    ProcessingJob,
     Setting,
     UnitConversion,
     UserAccount,
@@ -22,8 +25,10 @@ from text_evolver.services import (
     ValidationError,
     _acquire_create_job_lock,
     _calculate_row_changes,
+    _lock_setting_for_job,
     _validate_image_submission_size,
     copy_setting,
+    lock_setting_jobs_for_deletion,
     update_setting_from_form,
 )
 
@@ -111,6 +116,92 @@ def test_create_job_lock_is_skipped_for_sqlite():
     _acquire_create_job_lock(session, user_id=42)
 
     assert executed == []
+
+
+def test_lock_setting_for_job_uses_for_share_nowait():
+    statements = []
+    session = SimpleNamespace(scalar=lambda statement: statements.append(statement) or 42)
+
+    _lock_setting_for_job(session, setting_id=42)
+
+    assert len(statements) == 1
+    sql = str(statements[0].compile(dialect=postgresql.dialect()))
+    assert "WHERE setting.id =" in sql
+    assert sql.endswith("FOR SHARE NOWAIT")
+
+
+def test_lock_setting_for_job_rejects_missing_setting():
+    session = SimpleNamespace(scalar=lambda _statement: None)
+
+    with pytest.raises(ValidationError, match="Setting not found"):
+        _lock_setting_for_job(session, setting_id=42)
+
+
+def test_lock_setting_for_job_rejects_locked_setting():
+    class LockNotAvailable(Exception):
+        sqlstate = "55P03"
+
+    def raise_lock_error(_statement):
+        raise OperationalError("SELECT", {}, LockNotAvailable())
+
+    session = SimpleNamespace(scalar=raise_lock_error)
+
+    with pytest.raises(ValidationError, match="Setting is currently being updated"):
+        _lock_setting_for_job(session, setting_id=42)
+
+
+def test_lock_setting_jobs_for_deletion_uses_for_update():
+    statements = []
+    session = SimpleNamespace(scalars=lambda statement: statements.append(statement) or ())
+
+    assert lock_setting_jobs_for_deletion(session, setting_id=42) == []
+
+    assert len(statements) == 1
+    sql = str(statements[0].compile(dialect=postgresql.dialect()))
+    assert "WHERE processing_job.setting_id =" in sql
+    assert sql.endswith("FOR UPDATE")
+
+
+@pytest.mark.parametrize("job_status", ["queued", "running"])
+def test_update_setting_rejects_setting_used_by_active_job(
+    database,
+    app_settings,
+    image_storage,
+    job_status: str,
+):
+    with Session(database) as session:
+        user = UserAccount(username=f"owner-{job_status}")
+        session.add(user)
+        session.flush()
+        setting = Setting(owner_id=user.id, name="Original")
+        session.add(setting)
+        session.flush()
+        session.add(ProcessingJob(user_id=user.id, setting_id=setting.id, status=job_status))
+        session.commit()
+        form = FormData(
+            [
+                ("set_name", "Updated"),
+                ("set_public", "False"),
+                ("set_empty", "False"),
+                ("set_utf", "False"),
+                ("set_coma_sep", "False"),
+                ("set_expect_feet", "False"),
+            ]
+        )
+
+        with pytest.raises(ValidationError, match="while its job is queued or running"):
+            asyncio.run(
+                update_setting_from_form(
+                    session,
+                    setting.id,
+                    form,
+                    app_settings,
+                    image_storage,
+                    ImageStorageChanges(image_storage),
+                )
+            )
+
+        assert setting.name == "Original"
 
 
 def test_update_setting_preserves_unchanged_rows(database, app_settings, image_storage):

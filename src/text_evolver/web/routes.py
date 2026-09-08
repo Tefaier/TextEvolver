@@ -27,6 +27,7 @@ from text_evolver.services import (
     job_paths,
     latest_job,
     list_user_settings,
+    lock_setting_jobs_for_deletion,
     request_job_cancellation,
     search_settings,
     setting_image_object_keys,
@@ -206,6 +207,7 @@ async def delete_set(
     setting_id: int,
     request: Request,
     session: Session = Depends(get_db),
+    app_settings: AppSettings = Depends(get_application_settings),
     image_storage: ImageStorage = Depends(get_image_storage),
 ) -> Response:
     user = authenticated(request, session)
@@ -215,12 +217,14 @@ async def delete_set(
     )
     if setting is None:
         raise HTTPException(status_code=404, detail="Setting not found")
-    referenced = session.scalar(select(ProcessingJob.id).where(ProcessingJob.setting_id == setting_id).limit(1))
-    if referenced is not None:
-        raise HTTPException(status_code=409, detail="Setting is referenced by a processing job")
+    jobs = lock_setting_jobs_for_deletion(session, setting_id)
+    if any(job.status == "running" for job in jobs):
+        raise HTTPException(status_code=409, detail="Setting is used by a running job")
     storage_changes = ImageStorageChanges(image_storage)
     for object_key in setting_image_object_keys(session, setting_id):
         storage_changes.obsolete_object(object_key)
+    for job in jobs:
+        session.delete(job)
     session.execute(delete(Setting).where(Setting.id == setting_id))
     try:
         session.commit()
@@ -228,6 +232,9 @@ async def delete_set(
         session.rollback()
         storage_changes.database_rolled_back()
         raise
+    for job in jobs:
+        root, _, _ = job_paths(app_settings, job.id)
+        shutil.rmtree(root, ignore_errors=True)
     storage_changes.database_committed()
     return Response(status_code=204)
 
