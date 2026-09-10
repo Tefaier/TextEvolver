@@ -1,8 +1,10 @@
+import stat
 from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pandas as pd
 from PIL import Image
+from selenium.common.exceptions import WebDriverException
 
 from text_evolver.processing import browser, images, pokemon_cache
 
@@ -78,6 +80,56 @@ def test_refresh_only_fetches_pokemon_missing_from_cache(monkeypatch, tmp_path):
     assert tuple(dataframe.columns) == pokemon_cache.CSV_FIELDS
 
 
+def test_refresh_restarts_crashed_browser_and_retries_entry(monkeypatch, tmp_path):
+    entries = (
+        pokemon_cache.PokemonListEntry("Slowking", "https://pokemondb.net/pokedex/slowking"),
+        pokemon_cache.PokemonListEntry("Misdreavus", "https://pokemondb.net/pokedex/misdreavus"),
+    )
+    sessions = []
+
+    class FakeDriver:
+        page_source = "list"
+
+        def __init__(self, session_number):
+            self.session_number = session_number
+
+        def get(self, _url):
+            return None
+
+    @contextmanager
+    def fake_browser_session():
+        driver = FakeDriver(len(sessions) + 1)
+        sessions.append(driver)
+        yield driver
+
+    attempts = []
+
+    def fake_fetch(driver, _http, entry, directory):
+        attempts.append((driver.session_number, entry.name))
+        if entry.name == "Slowking" and sum(name == "Slowking" for _, name in attempts) == 1:
+            raise WebDriverException("tab crashed")
+        image_path = directory / "images" / f"{entry.name.casefold()}.image"
+        write_image(image_path)
+        return pokemon_cache.PokemonRecord(
+            name=entry.name,
+            page_url=entry.page_url,
+            image_url=f"https://img.example/{entry.name.casefold()}.png",
+            image_path=image_path,
+            height="",
+            weight="",
+        )
+
+    monkeypatch.setattr(pokemon_cache, "browser_session", fake_browser_session)
+    monkeypatch.setattr(pokemon_cache, "_parse_pokemon_list", lambda _html: entries)
+    monkeypatch.setattr(pokemon_cache, "_fetch_record", fake_fetch)
+
+    result = pokemon_cache.refresh_pokemon_cache(tmp_path)
+
+    assert result == pokemon_cache.PokemonCacheRefresh(listed=2, retained=0, downloaded=2, failed=0)
+    assert attempts == [(2, "Slowking"), (3, "Slowking"), (3, "Misdreavus")]
+    assert len(sessions) == 3
+
+
 def test_pokemon_image_uses_cached_file_and_csv_values(monkeypatch, tmp_path):
     image_path = tmp_path / "pikachu.image"
     write_image(image_path, "yellow")
@@ -106,8 +158,12 @@ def test_pokemon_image_uses_cached_file_and_csv_values(monkeypatch, tmp_path):
     }
 
 
-def test_browser_session_does_not_set_custom_profile(monkeypatch):
+def test_browser_session_uses_temp_driver_directory_without_custom_profile(monkeypatch, tmp_path):
     options = {}
+    driver_directory = tmp_path / "seleniumbase" / "drivers"
+    driver_directory.mkdir(parents=True)
+    uc_driver_path = driver_directory / "uc_driver"
+    uc_driver_path.touch(mode=0o555)
 
     class FakeDriver:
         def quit(self):
@@ -118,9 +174,17 @@ def test_browser_session_does_not_set_custom_profile(monkeypatch):
         return FakeDriver()
 
     monkeypatch.setattr(browser, "Driver", fake_driver)
-    monkeypatch.setattr(browser, "get_application_settings", lambda: SimpleNamespace(chrome_binary=None))
+    monkeypatch.setattr(
+        browser,
+        "get_application_settings",
+        lambda: SimpleNamespace(chrome_binary=None, temp_root=tmp_path),
+    )
+    monkeypatch.setattr(browser.seleniumbase_settings, "NEW_DRIVER_DIR", None, raising=False)
 
     with browser.browser_session():
         pass
 
+    assert driver_directory.is_dir()
+    assert uc_driver_path.stat().st_mode & stat.S_IWUSR
+    assert browser.seleniumbase_settings.NEW_DRIVER_DIR == str(driver_directory)
     assert "user_data_dir" not in options

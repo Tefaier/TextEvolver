@@ -43,6 +43,7 @@ services:
 
   migrate:
     image: redgate/flyway:11.15.0
+    platform: linux/amd64
     environment:
       FLYWAY_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
       FLYWAY_USER: ${POSTGRES_USER}

@@ -1,18 +1,30 @@
+import logging
+import stat
 from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any
 
 from seleniumbase import Driver
+from seleniumbase.config import settings as seleniumbase_settings
 from seleniumbase.core.sb_driver import DriverMethods
 
 from text_evolver.config import get_application_settings
 
 HTML_IMAGE_STYLE = "display: block; margin-left: auto; margin-right: auto; max-width: 99%;"
+LOGGER = logging.getLogger("text_evolver.processing.browser")
 
 
 @contextmanager
 def browser_session() -> Generator[DriverMethods, None, None]:
     settings = get_application_settings()
+    driver_directory = settings.temp_root / "seleniumbase" / "drivers"
+    driver_directory.mkdir(parents=True, exist_ok=True)
+    uc_driver_path = driver_directory / "uc_driver"
+    try:
+        uc_driver_path.chmod(uc_driver_path.stat().st_mode | stat.S_IWUSR)
+    except FileNotFoundError:
+        pass
+    seleniumbase_settings.NEW_DRIVER_DIR = str(driver_directory)
     options: dict[str, Any] = {
         "uc": True,
         "headless": True,
@@ -37,4 +49,7 @@ def browser_session() -> Generator[DriverMethods, None, None]:
         yield driver
     finally:
         if driver is not None:
-            driver.quit()
+            try:
+                driver.quit()
+            except Exception:
+                LOGGER.warning("Unable to close browser session cleanly", exc_info=True)

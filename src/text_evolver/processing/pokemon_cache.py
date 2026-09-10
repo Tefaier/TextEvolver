@@ -5,6 +5,7 @@ import logging
 import re
 from dataclasses import dataclass, replace
 from io import BytesIO
+from itertools import batched
 from pathlib import Path
 from urllib.parse import urljoin
 
@@ -12,7 +13,7 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 from PIL import Image
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException, WebDriverException
 from selenium.webdriver.common.by import By
 from seleniumbase.core.sb_driver import DriverMethods
 
@@ -25,6 +26,15 @@ POKEMON_BASE_URL = "https://pokemondb.net"
 POKEMON_LIST_PATH = "/pokedex/all"
 POKEMON_CSV_NAME = "pokemon.csv"
 CSV_FIELDS = ("name", "page_url", "image_url", "image_file", "height", "weight")
+POKEMON_BROWSER_BATCH_SIZE = 50
+POKEMON_BROWSER_CRASH_RETRIES = 1
+BROWSER_CRASH_MESSAGES = (
+    "chrome not reachable",
+    "disconnected: not connected to devtools",
+    "invalid session id",
+    "session deleted because of page crash",
+    "tab crashed",
+)
 
 
 @dataclass(frozen=True)
@@ -216,6 +226,56 @@ def _write_records(cache_directory: Path, records: tuple[PokemonRecord, ...]) ->
         temporary_path.unlink(missing_ok=True)
 
 
+def _is_browser_crash(error: WebDriverException) -> bool:
+    message = str(error).casefold()
+    return any(value in message for value in BROWSER_CRASH_MESSAGES)
+
+
+def _fetch_missing_records(
+    entries: tuple[PokemonListEntry, ...],
+    records: dict[tuple[str, str], PokemonRecord],
+    http: requests.Session,
+    cache_directory: Path,
+) -> tuple[int, int]:
+    downloaded = 0
+    failed = 0
+    crash_attempts: dict[tuple[str, str], int] = {}
+    for entry_batch in batched(entries, POKEMON_BROWSER_BATCH_SIZE):
+        pending = list(entry_batch)
+        while pending:
+            with browser_session() as driver:
+                for index, entry in enumerate(pending):
+                    key = _record_key(entry.name, entry.page_url)
+                    try:
+                        records[key] = _fetch_record(driver, http, entry, cache_directory)
+                    except WebDriverException as error:
+                        if not _is_browser_crash(error):
+                            failed += 1
+                            LOGGER.exception("Unable to cache Pokémon %s", entry.name)
+                            continue
+                        crash_attempts[key] = crash_attempts.get(key, 0) + 1
+                        if crash_attempts[key] <= POKEMON_BROWSER_CRASH_RETRIES:
+                            LOGGER.warning(
+                                "Browser crashed while caching Pokémon %s; restarting it and retrying",
+                                entry.name,
+                                exc_info=True,
+                            )
+                            pending = pending[index:]
+                        else:
+                            failed += 1
+                            LOGGER.exception("Unable to cache Pokémon %s after restarting the browser", entry.name)
+                            pending = pending[index + 1 :]
+                        break
+                    except Exception:
+                        failed += 1
+                        LOGGER.exception("Unable to cache Pokémon %s", entry.name)
+                    else:
+                        downloaded += 1
+                else:
+                    pending.clear()
+    return downloaded, failed
+
+
 def refresh_pokemon_cache(temp_root: Path) -> PokemonCacheRefresh:
     '''Refreshes pokemon info in temp directory - loads pages only for diff'''
     cache_directory = pokemon_cache_directory(temp_root)
@@ -224,30 +284,19 @@ def refresh_pokemon_cache(temp_root: Path) -> PokemonCacheRefresh:
     with browser_session() as driver:
         driver.get(POKEMON_BASE_URL + POKEMON_LIST_PATH)
         entries = _parse_pokemon_list(driver.page_source)
-        # from existing records with possible name change if just by case
-        records = {
-            _record_key(entry.name, entry.page_url): replace(
-                existing[_record_key(entry.name, entry.page_url)],
-                name=entry.name,
-                page_url=entry.page_url,
-            )
-            for entry in entries
-            if _record_key(entry.name, entry.page_url) in existing
-        }
-        retained = len(records)
-        downloaded = 0
-        failed = 0
-        with requests.Session() as http:
-            for entry in entries:
-                key = _record_key(entry.name, entry.page_url)
-                if key in records:
-                    continue
-                try:
-                    records[key] = _fetch_record(driver, http, entry, cache_directory)
-                except Exception:
-                    failed += 1
-                    LOGGER.exception("Unable to cache Pokémon %s", entry.name)
-                    continue
-                downloaded += 1
+    # from existing records with possible name change if just by case
+    records = {
+        _record_key(entry.name, entry.page_url): replace(
+            existing[_record_key(entry.name, entry.page_url)],
+            name=entry.name,
+            page_url=entry.page_url,
+        )
+        for entry in entries
+        if _record_key(entry.name, entry.page_url) in existing
+    }
+    retained = len(records)
+    missing_entries = tuple(entry for entry in entries if _record_key(entry.name, entry.page_url) not in records)
+    with requests.Session() as http:
+        downloaded, failed = _fetch_missing_records(missing_entries, records, http, cache_directory)
     _write_records(cache_directory, tuple(records.values()))
     return PokemonCacheRefresh(len(entries), retained, downloaded, failed)

@@ -82,6 +82,9 @@ cp .env.example .env
 podman compose up --build
 ```
 
+--build causes local build images to rebuild
+--force-recreate recreates containers even if their configuration in compose have not changed yet they are already removed by `docker compose down`
+
 The stack contains PostgreSQL, PgBouncer, a one-shot Flyway migration service,
 MinIO, a one-shot MinIO bucket initializer, the FastAPI server, and one worker.
 PostgreSQL is not published to the host;
@@ -95,6 +98,11 @@ Open <http://localhost:8000>. Health endpoints are available at
 MinIO publishes its S3 endpoint at <http://localhost:9000> and management
 console at <http://localhost:9001>. The initializer creates `S3_BUCKET`
 idempotently after MinIO becomes healthy.
+
+Connect to database by
+```bash
+PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -p 6432 -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+```
 
 ### User image storage
 
