@@ -1,4 +1,3 @@
-import stat
 from contextlib import contextmanager
 from types import SimpleNamespace
 
@@ -160,10 +159,6 @@ def test_pokemon_image_uses_cached_file_and_csv_values(monkeypatch, tmp_path):
 
 def test_browser_session_uses_temp_driver_directory_without_custom_profile(monkeypatch, tmp_path):
     options = {}
-    driver_directory = tmp_path / "seleniumbase" / "drivers"
-    driver_directory.mkdir(parents=True)
-    uc_driver_path = driver_directory / "uc_driver"
-    uc_driver_path.touch(mode=0o555)
 
     class FakeDriver:
         def quit(self):
@@ -184,7 +179,7 @@ def test_browser_session_uses_temp_driver_directory_without_custom_profile(monke
     with browser.browser_session():
         pass
 
+    driver_directory = tmp_path / "seleniumbase" / "drivers"
     assert driver_directory.is_dir()
-    assert uc_driver_path.stat().st_mode & stat.S_IWUSR
     assert browser.seleniumbase_settings.NEW_DRIVER_DIR == str(driver_directory)
     assert "user_data_dir" not in options

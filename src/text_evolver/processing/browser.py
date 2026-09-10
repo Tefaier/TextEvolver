@@ -1,5 +1,4 @@
 import logging
-import stat
 from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any
@@ -19,11 +18,6 @@ def browser_session() -> Generator[DriverMethods, None, None]:
     settings = get_application_settings()
     driver_directory = settings.temp_root / "seleniumbase" / "drivers"
     driver_directory.mkdir(parents=True, exist_ok=True)
-    uc_driver_path = driver_directory / "uc_driver"
-    try:
-        uc_driver_path.chmod(uc_driver_path.stat().st_mode | stat.S_IWUSR)
-    except FileNotFoundError:
-        pass
     seleniumbase_settings.NEW_DRIVER_DIR = str(driver_directory)
     options: dict[str, Any] = {
         "uc": True,

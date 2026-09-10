@@ -119,8 +119,8 @@ services:
     ports:
       - "${APP_PORT:-8000}:8000"
     volumes:
-      - work-data:/data/work
-      - temp-data:/data/tmp
+      - work-data:/data/work:z
+      - temp-data:/data/tmp:z
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -155,8 +155,8 @@ services:
       WORKER_MIN_FREE_MEMORY_BYTES: ${WORKER_MIN_FREE_MEMORY_BYTES:-805306368}
       JOB_STALE_SECONDS: ${JOB_STALE_SECONDS:-300}
     volumes:
-      - work-data:/data/work
-      - temp-data:/data/tmp
+      - work-data:/data/work:z
+      - temp-data:/data/tmp:z
     depends_on:
       app:
         condition: service_healthy
