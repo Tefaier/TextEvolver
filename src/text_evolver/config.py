@@ -21,6 +21,9 @@ class AppSettings(BaseSettings):
     )
     work_root: Path = Field(default=Path("var/work"), validation_alias="WORK_ROOT")
     temp_root: Path = Field(default=Path("var/tmp"), validation_alias="TEMP_ROOT")
+    seleniumbase_driver_root: Path = Field(
+        default=Path("var/seleniumbase"), validation_alias="SELENIUMBASE_DRIVER_ROOT"
+    )
     s3_endpoint_url: str = Field(min_length=1, validation_alias="S3_ENDPOINT_URL")
     s3_bucket: str = Field(min_length=3, validation_alias="S3_BUCKET")
     s3_region: str = Field(default="us-east-1", min_length=1, validation_alias="S3_REGION")
@@ -40,7 +43,7 @@ class AppSettings(BaseSettings):
     job_stale_seconds: int = Field(default=300, ge=30, validation_alias="JOB_STALE_SECONDS")
     results_per_page: int = Field(default=50, ge=1, le=200, validation_alias="RESULTS_PER_PAGE")
 
-    @field_validator("work_root", "temp_root", mode="after")
+    @field_validator("work_root", "temp_root", "seleniumbase_driver_root", mode="after")
     @classmethod
     def resolve_path(cls, value: Path) -> Path:
         return value.expanduser().resolve()

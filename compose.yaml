@@ -119,8 +119,8 @@ services:
     ports:
       - "${APP_PORT:-8000}:8000"
     volumes:
-      - work-data:/data/work:z
-      - temp-data:/data/tmp:z
+      - work-data:/data/work
+      - temp-data:/data/tmp
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -149,14 +149,15 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY}
       S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
       CHROME_BINARY: /usr/bin/chromium
+      SELENIUMBASE_DRIVER_ROOT: /app/${SELENIUMBASE_DRIVER_ROOT}
       WORKER_POLL_SECONDS: ${WORKER_POLL_SECONDS:-2}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-1}
       WORKER_CANCEL_POLL_SECONDS: ${WORKER_CANCEL_POLL_SECONDS:-0.5}
       WORKER_MIN_FREE_MEMORY_BYTES: ${WORKER_MIN_FREE_MEMORY_BYTES:-805306368}
       JOB_STALE_SECONDS: ${JOB_STALE_SECONDS:-300}
     volumes:
-      - work-data:/data/work:z
-      - temp-data:/data/tmp:z
+      - work-data:/data/work
+      - temp-data:/data/tmp
     depends_on:
       app:
         condition: service_healthy

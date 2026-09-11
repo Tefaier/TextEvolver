@@ -129,6 +129,29 @@ def test_refresh_restarts_crashed_browser_and_retries_entry(monkeypatch, tmp_pat
     assert len(sessions) == 3
 
 
+def test_activate_entry_tab_handles_apostrophe_without_xpath_interpolation():
+    class FakeTab:
+        text = "Farfetch'd"
+        clicked = False
+
+        def is_displayed(self):
+            return True
+
+        def click(self):
+            self.clicked = True
+
+    tab = FakeTab()
+
+    class FakeDriver:
+        def find_elements(self, by, value):
+            assert (by, value) == ("css selector", ".sv-tabs-tab-list a")
+            return [tab]
+
+    pokemon_cache._activate_entry_tab(FakeDriver(), "Farfetch'd")
+
+    assert tab.clicked
+
+
 def test_pokemon_image_uses_cached_file_and_csv_values(monkeypatch, tmp_path):
     image_path = tmp_path / "pikachu.image"
     write_image(image_path, "yellow")
@@ -159,6 +182,7 @@ def test_pokemon_image_uses_cached_file_and_csv_values(monkeypatch, tmp_path):
 
 def test_browser_session_uses_temp_driver_directory_without_custom_profile(monkeypatch, tmp_path):
     options = {}
+    driver_root = tmp_path / "seleniumbase"
 
     class FakeDriver:
         def quit(self):
@@ -172,14 +196,14 @@ def test_browser_session_uses_temp_driver_directory_without_custom_profile(monke
     monkeypatch.setattr(
         browser,
         "get_application_settings",
-        lambda: SimpleNamespace(chrome_binary=None, temp_root=tmp_path),
+        lambda: SimpleNamespace(chrome_binary=None, seleniumbase_driver_root=driver_root),
     )
     monkeypatch.setattr(browser.seleniumbase_settings, "NEW_DRIVER_DIR", None, raising=False)
 
     with browser.browser_session():
         pass
 
-    driver_directory = tmp_path / "seleniumbase" / "drivers"
+    driver_directory = driver_root / "drivers"
     assert driver_directory.is_dir()
     assert browser.seleniumbase_settings.NEW_DRIVER_DIR == str(driver_directory)
     assert "user_data_dir" not in options

@@ -177,6 +177,7 @@ are mocked in deterministic tests; no MinIO smoke test is included.
 | `MINIO_API_PORT` | Host port for the MinIO S3 endpoint |
 | `MINIO_CONSOLE_PORT` | Host port for the MinIO management console |
 | `CHROME_BINARY` | Optional Chromium executable override |
+| `SELENIUMBASE_DRIVER_ROOT` | Ephemeral writable directory for SeleniumBase-generated drivers |
 | `COOKIE_SECURE` | Enables HTTPS-only session cookies |
 | `UPLOAD_LIMIT_BYTES` | Total upload limit per job |
 | `WORKER_POLL_SECONDS` | Queue polling interval |

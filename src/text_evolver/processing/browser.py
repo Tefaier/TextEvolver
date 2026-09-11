@@ -16,7 +16,7 @@ LOGGER = logging.getLogger("text_evolver.processing.browser")
 @contextmanager
 def browser_session() -> Generator[DriverMethods, None, None]:
     settings = get_application_settings()
-    driver_directory = settings.temp_root / "seleniumbase" / "drivers"
+    driver_directory = settings.seleniumbase_driver_root / "drivers"
     driver_directory.mkdir(parents=True, exist_ok=True)
     seleniumbase_settings.NEW_DRIVER_DIR = str(driver_directory)
     options: dict[str, Any] = {

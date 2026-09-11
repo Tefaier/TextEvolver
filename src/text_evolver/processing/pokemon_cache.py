@@ -117,6 +117,13 @@ def _detail_value(driver: DriverMethods, label: str) -> str:
     return str(value.text).rsplit("(", 1)[0].strip()
 
 
+def _activate_entry_tab(driver: DriverMethods, entry_name: str) -> None:
+    for tab in driver.find_elements(By.CSS_SELECTOR, ".sv-tabs-tab-list a"):
+        if tab.text.strip() == entry_name and tab.is_displayed():
+            tab.click()
+            return
+
+
 def _fetch_record(
     driver: DriverMethods,
     http: requests.Session,
@@ -125,16 +132,16 @@ def _fetch_record(
 ) -> PokemonRecord:
     '''Gets and writes image and extra info if located '''
     driver.get(entry.page_url)
+    _activate_entry_tab(driver, entry.name)
     try:
-        tab = driver.find_element(By.XPATH, f"//div[@class='sv-tabs-tab-list']/a[text()='{entry.name}']")
-        if tab.is_displayed():
-            tab.click()
+        artwork_element = driver.find_element(
+            By.XPATH,
+            "//div[@class='sv-tabs-panel-list']"
+            "//following-sibling::div[@class='sv-tabs-panel active']//a[.//img]",
+        )
     except NoSuchElementException:
-        pass
-    artwork = driver.find_element(
-        By.XPATH,
-        "//div[@class='sv-tabs-panel-list']//following-sibling::div[@class='sv-tabs-panel active']//a",
-    ).get_attribute("href")
+        raise RuntimeError(f"No artwork URL found for {entry.name}") from None
+    artwork = artwork_element.get_attribute("href")
     if not artwork:
         raise RuntimeError(f"No artwork URL found for {entry.name}")
     response = http.get(artwork, timeout=30)
