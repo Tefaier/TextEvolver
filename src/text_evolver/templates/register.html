@@ -24,14 +24,5 @@
                 <a href="{{ url_for('login_page') }}">Log In instead</a>
             </div>
         </div>
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            <div class="col-2">
-            {% for category, msg in messages %}
-                <p class="text_usual msg {{ category }}">{{msg}}</p>
-            {% endfor %}
-            </div>
-        {% endif %}
-    {% endwith %}
     </div>
 {% endblock %}

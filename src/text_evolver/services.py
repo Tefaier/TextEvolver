@@ -652,9 +652,9 @@ def job_file_counts(settings: AppSettings, job: ProcessingJob | None) -> list[in
     if job is None:
         return [0, 0]
     _, origin, output = job_paths(settings, job.id)
-    pending = sum(1 for value in origin.glob("*") if value.is_file()) if origin.exists() else 0
+    total = sum(1 for value in origin.glob("*") if value.is_file()) if origin.exists() else 0
     completed = sum(1 for value in output.glob("*") if value.is_file()) if output.exists() else 0
-    return [pending, completed]
+    return [total, completed]
 
 
 def _acquire_create_job_lock(session: Session, user_id: int) -> None:

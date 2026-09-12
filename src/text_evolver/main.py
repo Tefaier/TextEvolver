@@ -7,6 +7,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from text_evolver.config import get_application_settings
+from text_evolver.web.processing_status import ProcessingConnectionLimiter
 from text_evolver.web.routes import router
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
@@ -30,9 +31,9 @@ def create_app() -> FastAPI:
     )
     application.mount("/static", StaticFiles(directory=PACKAGE_ROOT / "static"), name="static")
     application.state.templates = Jinja2Templates(directory=PACKAGE_ROOT / "templates")
+    application.state.processing_connections = ProcessingConnectionLimiter(settings.websocket_max_connections)
     application.include_router(router)
     return application
 
 
 app = create_app()
-

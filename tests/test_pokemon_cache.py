@@ -152,6 +152,22 @@ def test_activate_entry_tab_handles_apostrophe_without_xpath_interpolation():
     assert tab.clicked
 
 
+def test_artwork_url_reads_image_without_link():
+    class FakeImage:
+        def get_attribute(self, name):
+            assert name == "src"
+            return "https://img.pokemondb.net/artwork/tmp/victreebel-mega.jpg"
+
+    class FakeDriver:
+        def find_elements(self, by, value):
+            assert (by, value) == ("css selector", ".sv-tabs-panel.active img")
+            return [FakeImage()]
+
+    assert pokemon_cache._artwork_url(FakeDriver(), "Mega Victreebel") == (
+        "https://img.pokemondb.net/artwork/tmp/victreebel-mega.jpg"
+    )
+
+
 def test_pokemon_image_uses_cached_file_and_csv_values(monkeypatch, tmp_path):
     image_path = tmp_path / "pikachu.image"
     write_image(image_path, "yellow")

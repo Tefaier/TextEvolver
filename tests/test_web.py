@@ -1,9 +1,12 @@
 import secrets
+import time
 
+import pytest
 from conftest import csrf_from
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from starlette.websockets import WebSocketDisconnect
 
 from text_evolver.db.models import (
     ImageConversion,
@@ -15,6 +18,25 @@ from text_evolver.db.models import (
 )
 from text_evolver.services import job_paths
 from text_evolver.web.auth import encrypt_password, verify_password
+
+
+def create_processing_job(database, app_settings, *, status: str = "queued"):
+    with Session(database) as session:
+        owner = session.scalar(select(UserAccount).where(UserAccount.username == "reader"))
+        assert owner is not None
+        setting = Setting(owner_id=owner.id, name="WebSocket processing")
+        session.add(setting)
+        session.flush()
+        job = ProcessingJob(user_id=owner.id, setting_id=setting.id, status=status)
+        session.add(job)
+        session.commit()
+        job_id = job.id
+    _, origin, output = job_paths(app_settings, job_id)
+    origin.mkdir(parents=True)
+    output.mkdir(parents=True)
+    (origin / "first.html").write_text("first", encoding="utf-8")
+    (origin / "second.html").write_text("second", encoding="utf-8")
+    return job_id, output
 
 
 def test_readiness_checks_database_and_object_storage(client, image_storage):
@@ -43,6 +65,46 @@ def test_registration_encrypts_password(client: TestClient, database, app_settin
         assert stored.key_version == app_settings.password_key_current_version
         assert verify_password("not-plaintext", stored, app_settings)
         assert not verify_password("wrong-password", stored, app_settings)
+
+
+def test_form_validation_error_is_returned_for_popup_without_redirect(client: TestClient):
+    token = csrf_from(client.get("/login"))
+
+    response = client.post(
+        "/login",
+        data={"csrf_token": token, "username": "missing", "password": "wrong-password"},
+        headers={"Accept": "application/json"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "message": "User with these username and password does not exist",
+        "category": "error",
+    }
+
+
+def test_json_form_success_preserves_flash_for_redirect_destination(client: TestClient):
+    token = csrf_from(client.get("/register"))
+
+    response = client.post(
+        "/register",
+        data={
+            "csrf_token": token,
+            "username": "popup-user",
+            "password": "popup-password",
+            "confirm": "popup-password",
+        },
+        headers={"Accept": "application/json"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["redirect"].endswith("/my_settings")
+    destination = client.get(response.json()["redirect"])
+    assert 'id="notification-container"' in destination.text
+    assert 'class="notification notification-success"' in destination.text
+    assert "You successfully registered account popup-user" in destination.text
 
 
 def test_login_accepts_password_encrypted_with_previous_key(client: TestClient, database, app_settings):
@@ -152,6 +214,10 @@ def test_create_setting_and_enqueue_upload(registered_client: TestClient, databa
     assert 'name="phrase_regex"' in page.text
     assert 'onchange="Sync_phrase_regex(this)"' in page.text
     assert "data-phrase-regex-fallback" in page.text
+    assert 'class="explanation-backdrop"' in page.text
+    assert 'class="explanation-popup text_usual"' in page.text
+    assert 'aria-label="Close explanations"' in page.text
+    assert 'onclick="Close_exp(event)"' in page.text
     token = csrf_from(page)
     response = registered_client.post(
         f"/setting/{setting_id}",
@@ -160,7 +226,9 @@ def test_create_setting_and_enqueue_upload(registered_client: TestClient, databa
     )
     assert response.status_code == 200
     assert "Waits" in response.text
-    assert 'value="Terminate"' not in response.text
+    assert 'id="processing-files"' in response.text
+    assert "/ws/processing" in response.text
+    assert 'id="terminate-control" hidden' in response.text
     with Session(database) as session:
         job = session.scalar(select(ProcessingJob))
         assert job is not None
@@ -169,7 +237,94 @@ def test_create_setting_and_enqueue_upload(registered_client: TestClient, databa
         session.commit()
 
     response = registered_client.get("/my_settings")
-    assert 'value="Terminate"' in response.text
+    assert 'id="terminate-control" >' in response.text
+
+
+def test_processing_websocket_closes_when_there_is_no_job(registered_client: TestClient):
+    with registered_client.websocket_connect("/ws/processing") as websocket:
+        assert websocket.receive_json() == {
+            "job_id": None,
+            "status": "idle",
+            "completed_files": 0,
+            "total_files": 0,
+            "can_download": False,
+            "can_terminate": False,
+        }
+        with pytest.raises(WebSocketDisconnect) as disconnect:
+            websocket.receive_json()
+    assert disconnect.value.code == 1000
+
+
+def test_processing_websocket_reports_progress_and_closes_on_completion(
+    registered_client: TestClient,
+    database,
+    app_settings,
+):
+    job_id, output = create_processing_job(database, app_settings)
+
+    with registered_client.websocket_connect("/ws/processing") as websocket:
+        assert websocket.receive_json() == {
+            "job_id": job_id,
+            "status": "queued",
+            "completed_files": 0,
+            "total_files": 2,
+            "can_download": False,
+            "can_terminate": False,
+        }
+
+        (output / "first.html").write_text("processed", encoding="utf-8")
+        with Session(database) as session:
+            job = session.get(ProcessingJob, job_id)
+            assert job is not None
+            job.status = "running"
+            session.commit()
+        running = websocket.receive_json()
+        assert running["status"] == "running"
+        assert running["completed_files"] == 1
+        assert running["total_files"] == 2
+        assert running["can_terminate"]
+
+        (output / "second.html").write_text("processed", encoding="utf-8")
+        with Session(database) as session:
+            job = session.get(ProcessingJob, job_id)
+            assert job is not None
+            job.status = "completed"
+            session.commit()
+        completed = websocket.receive_json()
+        assert completed["status"] == "completed"
+        assert completed["completed_files"] == 2
+        assert completed["total_files"] == 2
+        assert completed["can_download"]
+        assert not completed["can_terminate"]
+        with pytest.raises(WebSocketDisconnect) as disconnect:
+            websocket.receive_json()
+    assert disconnect.value.code == 1000
+
+
+def test_processing_websocket_limits_connections_and_releases_closed_ones(
+    registered_client: TestClient,
+    database,
+    app_settings,
+):
+    create_processing_job(database, app_settings)
+    limiter = registered_client.app.state.processing_connections
+    limiter.maximum = 1
+
+    with registered_client.websocket_connect("/ws/processing") as first:
+        first.receive_json()
+        assert limiter.active_count == 1
+        with registered_client.websocket_connect("/ws/processing") as second:
+            with pytest.raises(WebSocketDisconnect) as disconnect:
+                second.receive_json()
+        assert disconnect.value.code == 1013
+
+    deadline = time.monotonic() + 1
+    while limiter.active_count and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert limiter.active_count == 0
+
+    with registered_client.websocket_connect("/ws/processing") as replacement:
+        assert replacement.receive_json()["status"] == "queued"
 
 
 def test_private_setting_requires_owner(client: TestClient, database):

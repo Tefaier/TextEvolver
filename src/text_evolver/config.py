@@ -42,6 +42,8 @@ class AppSettings(BaseSettings):
     worker_cancel_poll_seconds: float = Field(default=0.5, ge=0.1, validation_alias="WORKER_CANCEL_POLL_SECONDS")
     job_stale_seconds: int = Field(default=300, ge=30, validation_alias="JOB_STALE_SECONDS")
     results_per_page: int = Field(default=50, ge=1, le=200, validation_alias="RESULTS_PER_PAGE")
+    websocket_update_seconds: float = Field(default=5.0, ge=0.1, validation_alias="WEBSOCKET_UPDATE_SECONDS")
+    websocket_max_connections: int = Field(default=100, ge=1, le=10_000, validation_alias="WEBSOCKET_MAX_CONNECTIONS")
 
     @field_validator("work_root", "temp_root", "seleniumbase_driver_root", mode="after")
     @classmethod

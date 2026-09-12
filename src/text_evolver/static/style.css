@@ -5,16 +5,107 @@
     text-align: center;
     padding: 30px;
 }
-.msg{
-    text-indent: 0.5vw;
-    padding-left: 4px;
-    word-wrap:break-word;
+.notification-container{
+    position: fixed;
+    z-index: 1100;
+    top: 1rem;
+    left: 50%;
+    display: flex;
+    width: min(92vw, 40rem);
+    transform: translateX(-50%);
+    flex-direction: column;
+    gap: 0.6rem;
+    pointer-events: none;
 }
-.error{
-    border-left: 4px solid red;
+.notification{
+    opacity: 0;
+    transform: translateY(-0.75rem);
+    padding: 0.85rem 1.1rem;
+    border: 1px solid transparent;
+    border-radius: 0.5rem;
+    box-shadow: 0 0.35rem 1rem rgba(0, 0, 0, 0.25);
+    background: white;
+    color: #212529;
+    font-size: 1rem;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+    pointer-events: auto;
+    cursor: pointer;
+    transition: opacity 0.35s ease, transform 0.35s ease;
 }
-.success{
-    border-left: 4px solid green;
+.notification-visible{
+    opacity: 1;
+    transform: translateY(0);
+}
+.notification-leaving{
+    opacity: 0;
+    transform: translateY(-0.5rem);
+}
+.notification-error{
+    border-left: 0.35rem solid #dc3545;
+    background: #fff5f5;
+}
+.notification-success{
+    border-left: 0.35rem solid #198754;
+    background: #f1fff7;
+}
+@media (prefers-reduced-motion: reduce){
+    .notification{
+        transition-duration: 0.01ms;
+    }
+}
+.explanation-open{
+    overflow: hidden;
+}
+.explanation-backdrop{
+    position: fixed;
+    z-index: 1050;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.55);
+}
+.explanation-backdrop[hidden]{
+    display: none;
+}
+.explanation-popup{
+    width: min(92vw, 55rem);
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+    padding: 0 1.25rem 1.25rem;
+    border-radius: 0.65rem;
+    box-shadow: 0 0.5rem 1.75rem rgba(0, 0, 0, 0.35);
+    background: white;
+    color: #212529;
+}
+.explanation-header{
+    position: sticky;
+    z-index: 1;
+    top: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #dee2e6;
+    margin-bottom: 0.75rem;
+    background: white;
+}
+.explanation-header h2{
+    margin: 0;
+}
+.explanation-close{
+    border: 0;
+    background: transparent;
+    color: #495057;
+    font-size: 2rem;
+    line-height: 1;
+    cursor: pointer;
+}
+.explanation-close:hover,
+.explanation-close:focus{
+    color: black;
 }
 .clas{
     font-size: 15px;

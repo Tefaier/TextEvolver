@@ -135,12 +135,16 @@
     </div>
     <div class="row text_usual">
         <div class="col">
-            <button class="control_buttons" onclick="Toggle_exp(this)">Show explanations</button>
+            <button class="control_buttons" onclick="Open_exp(this)" aria-haspopup="dialog" aria-controls="Explanation" aria-expanded="false">Show explanations</button>
             <br>
         </div>
     </div>
-    <div hidden id="Explanation" class="row text_usual">
-        <div class="col">
+    <div hidden id="Explanation" class="explanation-backdrop" role="dialog" aria-modal="true" aria-labelledby="explanation-title" onclick="Close_exp(event)">
+        <div class="explanation-popup text_usual">
+            <div class="explanation-header">
+                <h2 id="explanation-title" class="text_big">Explanations</h2>
+                <button type="button" class="explanation-close" aria-label="Close explanations" onclick="Close_exp(event)">&times;</button>
+            </div>
             <p class="data_info">Text Evolver - this website allows you to alter content of your text-based files in certain ways</p>
             <p class="data_info">The way text will be altered is based on "setting" that you create and is connected yo your account</p>
             <br>
@@ -520,14 +524,5 @@
                 </div>
             </form>
         </div>
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            <div class="col-2">
-            {% for category, msg in messages %}
-                <p class="text_usual msg {{ category }}">{{msg}}</p>
-            {% endfor %}
-            </div>
-        {% endif %}
-    {% endwith %}
     </div>
 {% endblock %}

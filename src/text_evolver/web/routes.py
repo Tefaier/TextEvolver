@@ -6,8 +6,8 @@ import shutil
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect, status
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from sqlalchemy import delete, select, text
 from sqlalchemy.orm import Session
 from starlette.datastructures import UploadFile
@@ -17,6 +17,7 @@ from text_evolver.db.models import ProcessingJob, Setting, UserAccount, UserPass
 from text_evolver.db.session import get_db
 from text_evolver.image_storage import ImageStorage, ImageStorageChanges, get_image_storage
 from text_evolver.services import (
+    ACTIVE_JOB_STATUSES,
     ALLOWED_EXTENSIONS,
     ValidationError,
     copy_setting,
@@ -47,6 +48,7 @@ from text_evolver.web.auth import (
     validate_csrf,
     verify_password,
 )
+from text_evolver.web.processing_status import ProcessingConnectionLimiter, wait_for_disconnect
 
 router = APIRouter()
 
@@ -72,6 +74,33 @@ def redirect(request: Request, endpoint: str, **params: object) -> RedirectRespo
     return RedirectResponse(request.url_for(endpoint, **params), status_code=status.HTTP_303_SEE_OTHER)
 
 
+def accepts_json(request: Request) -> bool:
+    return "application/json" in request.headers.get("accept", "")
+
+
+def validation_error_response(
+    request: Request,
+    message: str,
+    template_name: str,
+    *,
+    status_code: int = status.HTTP_422_UNPROCESSABLE_CONTENT,
+    **values: object,
+) -> Response:
+    if accepts_json(request):
+        return JSONResponse(
+            {"message": message, "category": "error"},
+            status_code=status_code,
+        )
+    flash(request, message)
+    return render(request, template_name, **values)
+
+
+def form_redirect(request: Request, endpoint: str, **params: object) -> Response:
+    if accepts_json(request):
+        return JSONResponse({"redirect": str(request.url_for(endpoint, **params))})
+    return redirect(request, endpoint, **params)
+
+
 def authenticated(request: Request, session: Session) -> UserAccount:
     return require_user(request, session)
 
@@ -83,6 +112,75 @@ def navigation_context(session: Session, user: UserAccount, app_settings: AppSet
         "files_situation": job_file_counts(app_settings, job),
         "job": job,
     }
+
+
+def processing_snapshot(session: Session, user_id: int, app_settings: AppSettings) -> dict[str, object]:
+    try:
+        session.expire_all()
+        job = latest_job(session, user_id)
+        if job is None:
+            return {
+                "job_id": None,
+                "status": "idle",
+                "completed_files": 0,
+                "total_files": 0,
+                "can_download": False,
+                "can_terminate": False,
+            }
+        total_files, completed_files = job_file_counts(app_settings, job)
+        return {
+            "job_id": job.id,
+            "status": job.status,
+            "completed_files": completed_files,
+            "total_files": max(total_files, completed_files),
+            "can_download": job.status == "completed" and completed_files > 0,
+            "can_terminate": job.status == "running" and not job.cancellation_requested,
+        }
+    finally:
+        # A WebSocket lives much longer than a request. End each read transaction
+        # so PgBouncer can reuse the connection and the next read sees worker updates.
+        session.rollback()
+
+
+@router.websocket("/ws/processing", name="processing_status")
+async def processing_status(
+    websocket: WebSocket,
+    session: Session = Depends(get_db),
+    app_settings: AppSettings = Depends(get_application_settings),
+) -> None:
+    user_id = websocket.session.get("user_id")
+    if not isinstance(user_id, int) or session.get(UserAccount, user_id) is None:
+        await websocket.accept()
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    snapshot = processing_snapshot(session, user_id, app_settings)
+    if snapshot["status"] not in ACTIVE_JOB_STATUSES:
+        await websocket.accept()
+        await websocket.send_json(snapshot)
+        await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
+        return
+
+    limiter: ProcessingConnectionLimiter = websocket.app.state.processing_connections
+    if not await limiter.register(websocket):
+        await websocket.accept()
+        await websocket.close(code=status.WS_1013_TRY_AGAIN_LATER)
+        return
+
+    try:
+        await websocket.accept()
+        while True:
+            await websocket.send_json(snapshot)
+            if snapshot["status"] not in ACTIVE_JOB_STATUSES:
+                await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
+                return
+            if await wait_for_disconnect(websocket, app_settings.websocket_update_seconds):
+                return
+            snapshot = processing_snapshot(session, user_id, app_settings)
+    except WebSocketDisconnect:
+        return
+    finally:
+        await limiter.unregister(websocket)
 
 
 @router.get("/health/live", name="health_live")
@@ -125,12 +223,15 @@ async def login_submit(
         else session.scalar(select(UserPassword).where(UserPassword.user_id == user.id))
     )
     if user is None or stored_password is None or not verify_password(password, stored_password, app_settings):
-        flash(request, "User with these username and password does not exist")
-        return render(request, "loging.html")
+        return validation_error_response(
+            request,
+            "User with these username and password does not exist",
+            "loging.html",
+        )
     user.last_entry = dt.datetime.now(dt.UTC)
     login(request, user)
     flash(request, f"You successfully logged into account {user.username}", "success")
-    return redirect(request, "my_settings")
+    return form_redirect(request, "my_settings")
 
 
 @router.get("/register", response_class=HTMLResponse, name="register_page")
@@ -160,11 +261,10 @@ async def register_submit(
         session.flush()
         add_encrypted_password(session, user.id, password, app_settings)
     except ValidationError as exc:
-        flash(request, str(exc))
-        return render(request, "register.html")
+        return validation_error_response(request, str(exc), "register.html")
     login(request, user)
     flash(request, f"You successfully registered account {user.username}", "success")
-    return redirect(request, "my_settings")
+    return form_redirect(request, "my_settings")
 
 
 @router.post("/logout", name="logout")
@@ -172,7 +272,7 @@ async def logout_submit(request: Request, session: Session = Depends(get_db)) ->
     require_user(request, session)
     await validate_csrf(request)
     logout(request)
-    return redirect(request, "login_page")
+    return form_redirect(request, "login_page")
 
 
 @router.get("/my_settings", response_class=HTMLResponse, name="my_settings")
@@ -196,10 +296,15 @@ async def add_set(request: Request, session: Session = Depends(get_db)) -> Respo
     await validate_csrf(request)
     count = len(list_user_settings(session, user.id))
     if count >= user.setting_limit:
+        if accepts_json(request):
+            return JSONResponse(
+                {"message": "Reached the allowed settings limit", "category": "error"},
+                status_code=status.HTTP_409_CONFLICT,
+            )
         flash(request, "Reached the allowed settings limit")
     else:
         create_default_setting(session, user.id)
-    return redirect(request, "my_settings")
+    return form_redirect(request, "my_settings")
 
 
 @router.post("/delete_set/{setting_id}", name="delete_set")
@@ -245,7 +350,7 @@ async def search_req(request: Request, session: Session = Depends(get_db)) -> Re
     await validate_csrf(request)
     form = await request.form()
     phrase = str(form.get("search", "")).strip()
-    return redirect(request, "search", phrase=phrase or "_", page=1)
+    return form_redirect(request, "search", phrase=phrase or "_", page=1)
 
 
 @router.get("/search/{phrase}/{page}", response_class=HTMLResponse, name="search")
@@ -335,14 +440,14 @@ async def setting_submit(
         session.commit()
         database_committed = True
         storage_changes.database_committed()
-        return redirect(request, "my_settings")
+        return form_redirect(request, "my_settings")
     except ValidationError as exc:
         session.rollback()
         storage_changes.database_rolled_back()
-        flash(request, str(exc))
         refreshed = get_setting(session, setting_id) or setting
-        return render(
+        return validation_error_response(
             request,
+            str(exc),
             "setting.html",
             **navigation_context(session, user, app_settings),
             setting=refreshed,
@@ -360,7 +465,7 @@ async def terminate(request: Request, session: Session = Depends(get_db)) -> Res
     user = authenticated(request, session)
     await validate_csrf(request)
     request_job_cancellation(session, user.id)
-    return redirect(request, "my_settings")
+    return form_redirect(request, "my_settings")
 
 
 @router.post("/download_files", name="download_files")

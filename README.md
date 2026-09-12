@@ -180,6 +180,8 @@ are mocked in deterministic tests; no MinIO smoke test is included.
 | `SELENIUMBASE_DRIVER_ROOT` | Ephemeral writable directory for SeleniumBase-generated drivers |
 | `COOKIE_SECURE` | Enables HTTPS-only session cookies |
 | `UPLOAD_LIMIT_BYTES` | Total upload limit per job |
+| `WEBSOCKET_UPDATE_SECONDS` | Processing-status WebSocket update interval (5 seconds by default) |
+| `WEBSOCKET_MAX_CONNECTIONS` | Maximum active processing-status WebSockets per app process |
 | `WORKER_POLL_SECONDS` | Queue polling interval |
 | `WORKER_CONCURRENCY` | Maximum jobs processed concurrently by the worker (1-64) |
 | `WORKER_MIN_FREE_MEMORY_BYTES` | Memory threshold before claiming jobs |
