@@ -307,7 +307,7 @@ def test_processing_websocket_limits_connections_and_releases_closed_ones(
     app_settings,
 ):
     create_processing_job(database, app_settings)
-    limiter = registered_client.app.state.processing_connections
+    limiter = registered_client.app.state.websocket_limiter
     limiter.maximum = 1
 
     with registered_client.websocket_connect("/ws/processing") as first:

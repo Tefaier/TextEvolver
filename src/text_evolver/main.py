@@ -31,7 +31,7 @@ def create_app() -> FastAPI:
     )
     application.mount("/static", StaticFiles(directory=PACKAGE_ROOT / "static"), name="static")
     application.state.templates = Jinja2Templates(directory=PACKAGE_ROOT / "templates")
-    application.state.processing_connections = ProcessingConnectionLimiter(settings.websocket_max_connections)
+    application.state.websocket_limiter = ProcessingConnectionLimiter(settings.websocket_max_connections)
     application.include_router(router)
     return application
 

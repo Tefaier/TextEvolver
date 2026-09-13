@@ -161,7 +161,7 @@ async def processing_status(
         await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
         return
 
-    limiter: ProcessingConnectionLimiter = websocket.app.state.processing_connections
+    limiter: ProcessingConnectionLimiter = websocket.app.state.websocket_limiter
     if not await limiter.register(websocket):
         await websocket.accept()
         await websocket.close(code=status.WS_1013_TRY_AGAIN_LATER)
