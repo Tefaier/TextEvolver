@@ -1,81 +1,86 @@
 {% extends "basis.html" %}
 
 {% block context %}
-    <div class="fixed">
-        <nav class="top-bar">
-            <ul class="horizontal">
-                <li>
-                    <p class="text_usual centering no_hover">{{user.name}}</p>
-                </li>
-                <li><form action="{{ url_for('logout') }}" method="POST">
+    {% set job_active = job is not none and job.status in ('queued', 'running') %}
+    {% set job_complete = job is not none and job.status == 'completed' %}
+    <div class="app-shell">
+        <header class="app-header">
+            <p class="account-login" title="{{ user.name }}">{{ user.name }}</p>
+            <form class="header-search" action="{{ url_for('search_req') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <label class="sr-only" for="global-search">Search public settings</label>
+                <input id="global-search" name="search" type="search" placeholder="Search public settings">
+                <button type="submit" aria-label="Search"><i class="fas fa-search" aria-hidden="true"></i></button>
+            </form>
+            <div class="header-actions">
+                <form action="{{ url_for('download_files') }}" method="POST" data-native-submit>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button type="submit" class="text_usual centering">Log out</button>
-                </form></li>
-                <li><a href="{{ url_for('my_settings') }}" class="text_usual centering">My settings</a></li>
-                <li><form action="{{ url_for('search_req') }}" method="POST">
+                    <button id="processing-files" type="submit" onclick="Files_reset(this)"
+                            {{ '' if job_complete and files_situation[1] != 0 else 'disabled' }}
+                            aria-label="Processing files"
+                            class="header-action processing-status {{ 'proc_process' if job_active else ('proc_finished' if job_complete and files_situation[1] != 0 else 'proc_empty') }}">
+                        <i class="far fa-folder-open" aria-hidden="true"></i>
+                        <span data-processing-label>{% if user.waits %}Waits {% endif %}{{ files_situation[1] }} / {{ [files_situation[0], files_situation[1]] | max }}</span>
+                    </button>
+                </form>
+                <form id="terminate-control" action="{{ url_for('terminate') }}" method="POST"
+                      {{ '' if job is not none and job.status == 'running' and not job.cancellation_requested else 'hidden' }}>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <input name="search" type="search" placeholder="Search for settings" class="text_usual centering">
-                    <input type="submit" value="Search" class="text_usual centering">
-                </form></li>
-                <li>
-                    <form action="{{ url_for('download_files') }}" method="POST" data-native-submit>
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                        {% set job_active = job is not none and job.status in ('queued', 'running') %}
-                        {% set job_complete = job is not none and job.status == 'completed' %}
-                        <button id="processing-files" type="submit" onclick="Files_reset(this)"
-                                {{ '' if job_complete and files_situation[1] != 0 else 'disabled' }}
-                                class="text_usual centering {{ 'proc_process' if job_active else ('proc_finished' if job_complete and files_situation[1] != 0 else 'proc_empty') }}">
-                            {% if user.waits %}Waits {% endif %}{{ files_situation[1] }} / {{ [files_situation[0], files_situation[1]] | max }}
-                        </button>
-                    </form>
-                </li>
-                <li id="terminate-control" {{ '' if job is not none and job.status == 'running' and not job.cancellation_requested else 'hidden' }}>
-                    <form action="{{ url_for('terminate') }}" method="POST">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                        <input type="submit" class="text_usual centering" value="Terminate">
-                    </form>
-                </li>
-            </ul>
-        </nav>
-    </div>
-    {% if job_active %}
-    <script>
-        (() => {
-            const filesButton = document.getElementById("processing-files");
-            const terminateControl = document.getElementById("terminate-control");
-            let processingActive = true;
+                    <button type="submit" class="header-action header-action-danger">Terminate</button>
+                </form>
+                <form action="{{ url_for('logout') }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="header-action">
+                        <i class="fas fa-sign-out-alt" aria-hidden="true"></i>
+                        <span>Log out</span>
+                    </button>
+                </form>
+            </div>
+        </header>
 
-            function showSnapshot(snapshot) {
-                filesButton.textContent = `${snapshot.status === "queued" ? "Waits " : ""}${snapshot.completed_files} / ${snapshot.total_files}`;
-                filesButton.classList.remove("proc_process", "proc_empty", "proc_finished");
-                processingActive = snapshot.status === "queued" || snapshot.status === "running";
-                if (processingActive) {
-                    filesButton.classList.add("proc_process");
-                } else if (snapshot.can_download) {
-                    filesButton.classList.add("proc_finished");
-                } else {
-                    filesButton.classList.add("proc_empty");
-                }
-                filesButton.disabled = !snapshot.can_download;
-                terminateControl.hidden = !snapshot.can_terminate;
-            }
+        {% if job_active %}
+        <script>
+            (() => {
+                const filesButton = document.getElementById("processing-files");
+                const terminateControl = document.getElementById("terminate-control");
+                let processingActive = true;
 
-            function connectProcessingStatus() {
-                const socketUrl = new URL("{{ url_for('processing_status') }}", window.location.href);
-                socketUrl.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-                const socket = new WebSocket(socketUrl);
-                socket.addEventListener("message", event => showSnapshot(JSON.parse(event.data)));
-                socket.addEventListener("close", event => {
-                    if (processingActive && event.code !== 1000 && event.code !== 1008) {
-                        window.setTimeout(connectProcessingStatus, 5000);
+                function showSnapshot(snapshot) {
+                    const label = filesButton.querySelector("span");
+                    label.textContent = `${snapshot.status === "queued" ? "Waits " : ""}${snapshot.completed_files} / ${snapshot.total_files}`;
+                    filesButton.classList.remove("proc_process", "proc_empty", "proc_finished");
+                    processingActive = snapshot.status === "queued" || snapshot.status === "running";
+                    if (processingActive) {
+                        filesButton.classList.add("proc_process");
+                    } else if (snapshot.can_download) {
+                        filesButton.classList.add("proc_finished");
+                    } else {
+                        filesButton.classList.add("proc_empty");
                     }
-                });
-                window.addEventListener("pagehide", () => socket.close(), {once: true});
-            }
+                    filesButton.disabled = !snapshot.can_download;
+                    terminateControl.hidden = !snapshot.can_terminate;
+                }
 
-            connectProcessingStatus();
-        })();
-    </script>
-    {% endif %}
-{% block main_content %}{% endblock %}
+                function connectProcessingStatus() {
+                    const socketUrl = new URL("{{ url_for('processing_status') }}", window.location.href);
+                    socketUrl.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+                    const socket = new WebSocket(socketUrl);
+                    socket.addEventListener("message", event => showSnapshot(JSON.parse(event.data)));
+                    socket.addEventListener("close", event => {
+                        if (processingActive && event.code !== 1000 && event.code !== 1008) {
+                            window.setTimeout(connectProcessingStatus, 5000);
+                        }
+                    });
+                    window.addEventListener("pagehide", () => socket.close(), {once: true});
+                }
+
+                connectProcessingStatus();
+            })();
+        </script>
+        {% endif %}
+
+        <main class="app-main{% block main_class %}{% endblock %}">
+            {% block main_content %}{% endblock %}
+        </main>
+    </div>
 {% endblock %}

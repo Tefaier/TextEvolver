@@ -37,7 +37,7 @@
         </div>
         <div class="row" id="default_unit"> {# unit reference #}
             <div class="col-2">
-                <label class="data_heading">Unit convertation</label>
+                <label class="data_heading">Unit conversion</label>
                 <button type="button" onclick="Delete_part(this)" class="control_buttons">Delete</button>
             </div>
             <div class="col">
@@ -96,7 +96,7 @@
         </div>
         <div class="row" id="default_text"> {# phrase reference #}
             <div class="col-2">
-                <label class="data_heading">Phrase convertion</label>
+                <label class="data_heading">Phrase conversion</label>
                 <button type="button" onclick="Delete_part(this)" class="control_buttons">Delete</button>
             </div>
             <div class="col">
@@ -133,11 +133,10 @@
             </div>
         </div>
     </div>
-    <button type="button" class="explanation-trigger" onclick="Open_exp(this)" aria-label="Open explanations" aria-haspopup="dialog" aria-controls="Explanation" aria-expanded="false">?</button>
     <div hidden id="Explanation" class="explanation-backdrop" role="dialog" aria-modal="true" aria-labelledby="explanation-title" onclick="Close_exp(event)">
-        <div class="explanation-popup text_usual">
+        <div class="explanation-popup">
             <div class="explanation-header">
-                <h2 id="explanation-title" class="text_big">Explanations</h2>
+                <h2 id="explanation-title">Setting guide</h2>
                 <button type="button" class="explanation-close" aria-label="Close explanations" onclick="Close_exp(event)">&times;</button>
             </div>
             <p class="data_info">Text Evolver - this website allows you to alter content of your text-based files in certain ways</p>
@@ -148,7 +147,7 @@
             <p class="data_info">Clean empty of setting: determines if to clean lines without actual meaning (only symbols - no letters or digits) in the text</p>
             <p class="data_info">Convert to utf of setting: determines if to convert symbols as &lt; to their utf representation</p>
             <p class="data_info">Digit separator: determines what will be recognised as a separator in decimals, only one can be chosen</p>
-            <p class="data_info">Expect feet: if you want your setting to recognise ft in the form of 6'7, choose it. They will then be converted to cm by default unless you set unit convertation from phrase "feet"</p>
+            <p class="data_info">Expect feet: if you want your setting to recognise ft in the form of 6'7, choose it. They will then be converted to cm by default unless you set a unit conversion from the phrase "feet".</p>
             <br>
             <p class="data_info">Fandom of {name}: a recognition of certain fandom based on official website. User can't add a new one. Its function is to add images to text if it finds name from fandom</p>
             <p class="data_info">Fandom - Activated: determines if this fandom is activated. If yes, it can heavily affect performance speed</p>
@@ -156,20 +155,20 @@
             <p class="data_info">Fandom - Show height: tells if image should have this value on it (taken from official website). Won't be shown if it's not possible</p>
             <p class="data_info">Fandom - Show weight: tells if image should have this value on it (taken from official website). Won't be shown if it's not possible</p>
             <br>
-            <p class="data_info">Unit convertation: recognises unit and then converts it to another</p>
+            <p class="data_info">Unit conversion: recognises a unit and then converts it to another.</p>
             <p class="data_info">Unit - Initial unit: what word will be recognised and trigger change</p>
             <p class="data_info">Unit - New unit: the unit that unit will be replaced with</p>
             <p class="data_info">Unit - Convertation of unit: by what value number before unit will be multiplied</p>
             <p class="data_info">Unit - Can be word: if initial unit can be as well act as word and not unit, choose it. Otherwise it will always change and add number before it, if there is none</p>
             <br>
-            <p class="data_info">Image add (convertation): adds image based on some phrase</p>
+            <p class="data_info">Image insertion: adds an image based on a phrase.</p>
             <p class="data_info">Image - Trigger phrase: what phrase will be recognised and trigger change (if it overlaps with fandom's value, they will merge)</p>
             <p class="data_info">Image - Separation: determines number of words that have to be between the same phrase to trigger image insertion. If it's "1", it will insert image only once</p>
             <p class="data_info">Image - Explanation: a phrase that will be added on image as a sort of explanation. Must be at most 64 characters. If left empty, there will be none (and no space on image reserved)</p>
             <p class="data_info">Image - Accept suffix: if recognition by phrase should accept having suffixes</p>
             <p class="data_info">Image - Images: image(s) that will be added. If there are few, one will be chosen randomly. If it's merged with fandom's value, image will be chosen from these and fandom's. Also, if you opened already existing setting, living it empty will leave previous images and changing will set new</p>
             <br>
-            <p class="data_info">Phrase convertion: recognises phrase and then converts it to another</p>
+            <p class="data_info">Phrase replacement: recognises a phrase and then replaces it.</p>
             <p class="data_info">Phrase - Change from: what phrase will be recognised and trigger change</p>
             <p class="data_info">Phrase - Change to: on what phrase initial one will be changed</p>
             <p class="data_info">Phrase - Direct change: if chosen, change will recognise only initial phrase as it's but will as well allow initial phrase to have special symbols</p>
@@ -187,10 +186,34 @@
             <br>
         </div>
     </div>
-    <div class="row no-gutters text_usual"> {# start of work field #}
-        <div class="col">
-            <form action="{{ url_for('setting', setting_id=setting.id) }}" method="POST" enctype=multipart/form-data>
+    <section class="page editor-page">
+        <header class="page-heading">
+            <div>
+                <p class="eyebrow">{{ "Owned by you" if setting.owner_id == user.id else "Public setting" }}</p>
+                <h1>{{ setting.name }}</h1>
+                <p>Configure transformations and run them on your documents.</p>
+            </div>
+            <div class="page-actions">
+                <button type="button" class="button" onclick="window.location.href='{{ url_for('my_settings') }}'">
+                    <i class="fas fa-arrow-left" aria-hidden="true"></i>
+                    All settings
+                </button>
+                <button type="button" class="button explanation-button" onclick="Open_exp(this)"
+                        aria-haspopup="dialog" aria-controls="Explanation" aria-expanded="false">
+                    <i class="far fa-question-circle" aria-hidden="true"></i>
+                    Guide
+                </button>
+            </div>
+        </header>
+        <section class="panel editor-panel">
+            <form class="editor-form" action="{{ url_for('setting', setting_id=setting.id) }}" method="POST" enctype=multipart/form-data>
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <section class="editor-section">
+                    <div class="editor-section-copy">
+                        <h2>Configuration</h2>
+                        <p>Name the setting and choose who can discover it.</p>
+                    </div>
+                    <div class="editor-section-fields">
                 <div class="row">
                     <div class="col-2">
                         <label class="data_heading">Name of setting</label>
@@ -221,6 +244,14 @@
                     </div>
                 </div>
                 <hr class="new" />
+                    </div>
+                </section>
+                <section class="editor-section">
+                    <div class="editor-section-copy">
+                        <h2>General conversion</h2>
+                        <p>Shared conversion behavior, including future general options.</p>
+                    </div>
+                    <div class="editor-section-fields editor-section-fields-grid">
                 <div class="row">
                     <div class="col-2">
                         <label class="data_heading">Clean empty lines</label>
@@ -286,22 +317,30 @@
                         <div class="data_info">
                             <select name="set_expect_feet">
                                 {% if setting.expect_feet %}
-                                <option value="True" selected>Feets (6'7) will be in text</option>
-                                <option value="False">Feets won't be in text</option>
+                                <option value="True" selected>Feet notation (6'7) may appear</option>
+                                <option value="False">Feet notation won't appear</option>
                                 {% else %}
-                                <option value="True">Feets (6'7) will be in text</option>
-                                <option value="False" selected>Feets won't be in text</option>
+                                <option value="True">Feet notation (6'7) may appear</option>
+                                <option value="False" selected>Feet notation won't appear</option>
                                 {% endif %}
                             </select>
                         </div>
                     </div>
                 </div>
                 <hr class="new" />
+                    </div>
+                </section>
+                <section class="editor-section fandom-section">
+                    <div class="editor-section-copy">
+                        <h2>Fandoms</h2>
+                        <p>Preconfigured fandoms with many rules included.</p>
+                    </div>
+                    <div class="editor-section-fields">
                 {% for fandom in setting.fandoms %}
                 <div class="row">
                     <div class="col-2">
                         <input value="{{ fandom.name }}" name="fandom" type="hidden">
-                        <label class="data_heading">Fandom of {{ fandom.name }}</label>
+                        <label class="data_heading">{{ fandom.name }}</label>
                     </div>
                     <div class="col"> {# information of fandom #}
                         <div class="data_info"> {# fandom.active #}
@@ -348,10 +387,20 @@
                 </div>
                 <hr class="new" />
                 {% endfor %}
+                    </div>
+                </section>
+                <section class="rule-section">
+                    <header class="rule-section-heading">
+                        <div>
+                            <h2>Unit conversions</h2>
+                            <p>Replace units and convert their numeric values.</p>
+                        </div>
+                    </header>
+                    <div class="rule-list">
                 {% for unit_conv in setting.unit_convs %}
                 <div class="row">
                     <div class="col-2">
-                        <label class="data_heading">Unit convertation</label>
+                        <label class="data_heading">Unit conversion</label>
                         <button type="button" onclick="Delete_part(this)" class="control_buttons">Delete</button>
                     </div>
                     <div class="col"> {# information of unit convertation #}
@@ -385,10 +434,20 @@
                 {% endfor %}
                 <div class="row">
                     <div class="col">
-                        <button type="button" type="button" onclick="Add_unit(this)" class="control_buttons">Add unit convertion</button>
+                        <button type="button" onclick="Add_unit(this)" class="control_buttons">Add unit conversion</button>
                     </div>
                 </div>
                 <hr class="new" />
+                    </div>
+                </section>
+                <section class="rule-section">
+                    <header class="rule-section-heading">
+                        <div>
+                            <h2>Image insertions</h2>
+                            <p>Insert uploaded images when trigger phrases are found.</p>
+                        </div>
+                    </header>
+                    <div class="rule-list">
                 {% for image_conv in setting.image_convs %}
                 <div class="row">
                     <div class="col-2">
@@ -431,14 +490,24 @@
                 {% endfor %}
                 <div class="row">
                     <div class="col">
-                        <button type="button" onclick="Add_image(this)" class="control_buttons">Add image convertion</button>
+                        <button type="button" onclick="Add_image(this)" class="control_buttons">Add image insertion</button>
                     </div>
                 </div>
                 <hr class="new" />
+                    </div>
+                </section>
+                <section class="rule-section">
+                    <header class="rule-section-heading">
+                        <div>
+                            <h2>Phrase replacements</h2>
+                            <p>Replace matching phrases while preserving document structure.</p>
+                        </div>
+                    </header>
+                    <div class="rule-list">
                 {% for phrase_conv in setting.phrase_convs %}
                 <div class="row">
                     <div class="col-2">
-                        <label class="data_heading">Phrase convertion</label>
+                        <label class="data_heading">Phrase replacement</label>
                         <button type="button" onclick="Delete_part(this)" class="control_buttons">Delete</button>
                     </div>
                     <div class="col"> {# information of text convertation #}
@@ -495,31 +564,45 @@
                 {% endfor %}
                 <div class="row">
                     <div class="col">
-                        <button type="button" onclick="Add_text(this)" class="control_buttons">Add text convertion</button>
+                        <button type="button" onclick="Add_text(this)" class="control_buttons">Add phrase replacement</button>
                     </div>
                 </div>
                 <hr class="new" />
-                <div class="row">
-                    <div class="col data_info"> {# files input #}
-                        <label>Files to process</label>
-                        <input onchange="Activate_run(this)" name="Process_files" type="file" accept="{{ '.' + allowed_extensions|join(', .') }}" multiple>
                     </div>
-                </div>
-                <hr class="new" />
-                <div class="row">
-                    <div class="col">
-                        <button class="control_buttons" type="button" onclick="window.location.href='{{ url_for('my_settings') }}'">Close</button>
+                </section>
+                <section class="file-upload-section">
+                    <div class="file-upload-copy">
+                        <span class="file-upload-icon"><i class="far fa-file-alt" aria-hidden="true"></i></span>
+                        <div>
+                            <h2>Files to process</h2>
+                            <p><span data-file-selection>No files selected</span> · {{ allowed_extensions|join(', ')|upper }}</p>
+                        </div>
+                    </div>
+                    <label class="button file-picker" for="process-files">
+                        <i class="fas fa-upload" aria-hidden="true"></i>
+                        Choose files
+                    </label>
+                    <input id="process-files" class="native-file-input" onchange="Activate_run(this); Update_file_label(this)"
+                           name="Process_files" type="file" accept="{{ '.' + allowed_extensions|join(', .') }}" multiple>
+                </section>
+                <footer class="editor-actions">
+                    <div class="button-group">
+                        <button class="button" type="button" onclick="Close_setting('{{ url_for('my_settings') }}')">Close</button>
                         {% if setting.owner_id == user.id %}
-                        <button class="control_buttons" type="button" onclick="window.location.href='{{ url_for('setting', setting_id=setting.id) }}'">Reset</button>
-                        <input class="control_buttons" type="submit" name="save" value="Save">
-                        <input class="control_buttons" type="submit" name="save_run" id="RunS" value="Save and run{{ '' if (files_situation[0]==0 and files_situation[1]==0) else ' (disabled)' }}" disabled>
-                        {% else %}
-                        <input class="control_buttons" type="submit" name="copy" value="Copy">
-                        {% endif %}
-                        <input class="control_buttons" type="submit" name="run" id="Run" value="Run{{ '' if (files_situation[0]==0 and files_situation[1]==0) else ' (disabled)' }}" disabled>
+                        <button class="button" type="button" onclick="window.location.href='{{ url_for('setting', setting_id=setting.id) }}'">Reset</button>
                     </div>
-                </div>
+                    <div class="button-group">
+                        <input class="button" type="submit" name="save" value="Save">
+                        <input class="button button-primary" type="submit" name="save_run" id="RunS" value="Save and run{{ '' if (files_situation[0]==0 and files_situation[1]==0) else ' (disabled)' }}" disabled>
+                        {% else %}
+                    </div>
+                    <div class="button-group">
+                        <input class="button" type="submit" name="copy" value="Copy to my settings">
+                        {% endif %}
+                        <input class="button" type="submit" name="run" id="Run" value="Run{{ '' if (files_situation[0]==0 and files_situation[1]==0) else ' (disabled)' }}" disabled>
+                    </div>
+                </footer>
             </form>
-        </div>
-    </div>
+        </section>
+    </section>
 {% endblock %}

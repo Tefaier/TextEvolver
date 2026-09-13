@@ -2,6 +2,7 @@ import secrets
 import time
 
 import pytest
+from bs4 import BeautifulSoup
 from conftest import csrf_from
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -54,7 +55,7 @@ def test_registration_encrypts_password(client: TestClient, database, app_settin
         data={"csrf_token": token, "username": "alice", "password": "not-plaintext", "confirm": "not-plaintext"},
     )
     assert response.status_code == 200
-    assert "My settings" in response.text
+    assert "Your workspace" in response.text
     with Session(database) as session:
         user = session.scalar(select(UserAccount).where(UserAccount.username == "alice"))
         assert user is not None
@@ -138,7 +139,7 @@ def test_login_accepts_password_encrypted_with_previous_key(client: TestClient, 
     )
 
     assert response.status_code == 200
-    assert "My settings" in response.text
+    assert "Your workspace" in response.text
     with Session(database) as session:
         stored = session.scalar(select(UserPassword).where(UserPassword.user_id == user_id))
         assert stored is not None
@@ -200,6 +201,67 @@ def test_csrf_is_required_for_mutations(registered_client: TestClient):
     assert response.status_code == 403
 
 
+def test_crisp_authentication_layout_preserves_original_images(client: TestClient):
+    login_page = client.get("/login")
+    register_page = client.get("/register")
+
+    assert 'class="auth-page"' in login_page.text
+    assert "/static/login.png" in login_page.text
+    assert "What Text Evolver does" in login_page.text
+    assert 'class="auth-page"' in register_page.text
+    assert "/static/register.png" in register_page.text
+    assert "What Text Evolver does" in register_page.text
+
+
+def test_workspace_has_one_add_action_and_setting_menu(registered_client: TestClient):
+    token = csrf_from(registered_client.get("/my_settings"))
+    page = registered_client.post("/add_set", data={"csrf_token": token})
+
+    assert page.status_code == 200
+    assert page.text.count('name="New_setting"') == 1
+    assert "data-setting-row" in page.text
+    assert 'class="settings-menu-trigger"' in page.text
+    assert "Edit setting" in page.text
+    assert "Delete setting" in page.text
+
+
+def test_search_uses_scrollable_results_and_fixed_pager(registered_client: TestClient, database):
+    with Session(database) as session:
+        owner = session.scalar(select(UserAccount).where(UserAccount.username == "reader"))
+        assert owner is not None
+        session.add(Setting(owner_id=owner.id, name="Search fixture", public=True))
+        session.commit()
+
+    page = registered_client.get("/search/Search/1")
+
+    assert page.status_code == 200
+    assert 'class="search-results"' in page.text
+    assert 'class="search-pagination"' in page.text
+    assert "My settings" in page.text
+    assert "Guide" in page.text
+    assert "Refine" not in page.text
+
+
+def test_public_setting_uses_copy_action_for_non_owner(registered_client: TestClient, database):
+    with Session(database) as session:
+        author = UserAccount(username="public-author")
+        session.add(author)
+        session.flush()
+        setting = Setting(owner_id=author.id, name="Public source", public=True)
+        session.add(setting)
+        session.commit()
+        setting_id = setting.id
+
+    page = registered_client.get(f"/setting/{setting_id}")
+
+    assert page.status_code == 200
+    assert 'name="copy" value="Copy to my settings"' in page.text
+    assert 'name="save"' not in page.text
+    assert 'name="save_run"' not in page.text
+    assert 'name="run"' in page.text
+    assert 'name="Process_files"' in page.text
+
+
 def test_create_setting_and_enqueue_upload(registered_client: TestClient, database):
     page = registered_client.get("/my_settings")
     token = csrf_from(page)
@@ -214,19 +276,24 @@ def test_create_setting_and_enqueue_upload(registered_client: TestClient, databa
     assert 'name="phrase_regex"' in page.text
     assert 'onchange="Sync_phrase_regex(this)"' in page.text
     assert "data-phrase-regex-fallback" in page.text
-    assert 'class="explanation-trigger"' in page.text
-    assert 'aria-label="Open explanations"' in page.text
-    assert 'aria-expanded="false">?</button>' in page.text
+    assert "Configuration" in page.text
+    assert "General conversion" in page.text
+    assert "Fandoms" in page.text
+    assert 'name="Process_files"' in page.text
+    assert 'class="button explanation-button"' in page.text
+    assert 'aria-controls="Explanation"' in page.text
+    assert 'aria-expanded="false"' in page.text
     assert 'class="explanation-backdrop"' in page.text
-    assert 'class="explanation-popup text_usual"' in page.text
+    assert 'class="explanation-popup"' in page.text
     assert 'aria-label="Close explanations"' in page.text
     assert 'onclick="Close_exp(event)"' in page.text
     assert (
-        "type=\"button\" onclick=\"window.location.href='http://testserver/my_settings'\">Cancel</button>"
+        "class=\"button\" type=\"button\" onclick=\"Close_setting('http://testserver/my_settings')\">Close</button>"
         in page.text
     )
+    assert "function Close_setting(fallbackUrl)" in page.text
     assert (
-        f"type=\"button\" onclick=\"window.location.href='http://testserver/setting/{setting_id}'\">Reset</button>"
+        f"class=\"button\" type=\"button\" onclick=\"window.location.href='http://testserver/setting/{setting_id}'\">Reset</button>"
         in page.text
     )
     token = csrf_from(page)
@@ -239,7 +306,9 @@ def test_create_setting_and_enqueue_upload(registered_client: TestClient, databa
     assert "Waits" in response.text
     assert 'id="processing-files"' in response.text
     assert "/ws/processing" in response.text
-    assert 'id="terminate-control" hidden' in response.text
+    terminate_control = BeautifulSoup(response.text, "html.parser").find(id="terminate-control")
+    assert terminate_control is not None
+    assert terminate_control.has_attr("hidden")
     with Session(database) as session:
         job = session.scalar(select(ProcessingJob))
         assert job is not None
@@ -248,7 +317,9 @@ def test_create_setting_and_enqueue_upload(registered_client: TestClient, databa
         session.commit()
 
     response = registered_client.get("/my_settings")
-    assert 'id="terminate-control" >' in response.text
+    terminate_control = BeautifulSoup(response.text, "html.parser").find(id="terminate-control")
+    assert terminate_control is not None
+    assert not terminate_control.has_attr("hidden")
 
 
 def test_processing_websocket_closes_when_there_is_no_job(registered_client: TestClient):

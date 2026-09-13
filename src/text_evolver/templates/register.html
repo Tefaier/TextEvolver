@@ -1,28 +1,32 @@
 {% extends "basis.html" %}
 
 {% block context %}
-    <div class="row">
-        <div class="col">
-            <img src="{{ url_for('static', path='register.png') }}" border="2" class="image-my">
-            <form action="{{ url_for('register') }}" method="post">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <p class="loging">
-                    <label for="username">Username</label><br>
-                    <input id="username" name="username" size="32" required minlength="4" maxlength="62">
-                </p>
-                <p class="loging">
-                    <label for="password">Password</label><br>
-                    <input id="password" name="password" type="password" size="32" required minlength="4" maxlength="128">
-                </p>
-                <p class="loging">
-                    <label for="confirm">Repeat password</label><br>
-                    <input id="confirm" name="confirm" type="password" size="32" required minlength="4" maxlength="128">
-                </p>
-                <p class="loging"><input type="submit" name="reg" value="Register" size="32"></p>
-            </form>
-            <div class="loging">
-                <a href="{{ url_for('login_page') }}">Log In instead</a>
+    <main class="auth-page">
+        <section class="auth-visual" aria-label="About Text Evolver">
+            <div class="auth-visual-content">
+                <div class="auth-image-wrap">
+                    <img src="{{ url_for('static', path='register.png') }}" class="auth-image" alt="Text Evolver">
+                </div>
+                <div class="auth-description">
+                    <h1>What Text Evolver does</h1>
+                    <p>Create reusable conversion rules for DOCX, EPUB, HTML, and FB2 documents, process files in an isolated workspace, and download the finished result as a ZIP.</p>
+                </div>
             </div>
-        </div>
-    </div>
+        </section>
+        <section class="auth-form-panel">
+            <form class="auth-form" action="{{ url_for('register') }}" method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <h2>Create your account</h2>
+                <p class="auth-form-description">Save reusable settings and process documents in your workspace.</p>
+                <label for="username">Username</label>
+                <input id="username" name="username" autocomplete="username" required minlength="4" maxlength="62">
+                <label for="password">Password</label>
+                <input id="password" name="password" type="password" autocomplete="new-password" required minlength="4" maxlength="128">
+                <label for="confirm">Repeat password</label>
+                <input id="confirm" name="confirm" type="password" autocomplete="new-password" required minlength="4" maxlength="128">
+                <button class="button button-primary button-block" type="submit" name="reg">Register</button>
+            </form>
+            <p class="auth-alternative">Already registered? <a href="{{ url_for('login_page') }}">Sign in instead</a></p>
+        </section>
+    </main>
 {% endblock %}

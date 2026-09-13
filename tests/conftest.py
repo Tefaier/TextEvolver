@@ -58,7 +58,7 @@ def app_settings(tmp_path: Path, database) -> AppSettings:
         work_root=tmp_path / "work",
         temp_root=tmp_path / "tmp",
         worker_min_free_memory_bytes=0,
-        websocket_update_seconds=0.01,
+        websocket_update_seconds=0.1,
         websocket_max_connections=1,
     )
     settings.ensure_directories()

@@ -1,25 +1,30 @@
 {% extends "basis.html" %}
 
 {% block context %}
-    <div class="row">
-        <div class="col">
-            <img src="{{ url_for('static', path='login.png') }}" border="2" class="image-my">
-            <form action="{{ url_for('login') }}" method="post">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <p class="loging">
-                    <label for="username">Username</label><br>
-                    <input id="username" name="username" size="32" required minlength="4" maxlength="62">
-                </p>
-                <p class="loging">
-                    <label for="password">Password</label><br>
-                    <input id="password" name="password" type="password" size="32" required minlength="4" maxlength="128">
-                </p>
-                <p class="loging"><input type="submit" name="subm" value="Sign In" size="32"></p>
-
-            </form>
-            <div class="loging">
-                <a href="{{ url_for('register_page') }}">Register</a>
+    <main class="auth-page">
+        <section class="auth-visual" aria-label="About Text Evolver">
+            <div class="auth-visual-content">
+                <div class="auth-image-wrap">
+                    <img src="{{ url_for('static', path='login.png') }}" class="auth-image" alt="Text Evolver">
+                </div>
+                <div class="auth-description">
+                    <h1>What Text Evolver does</h1>
+                    <p>Create reusable conversion rules for DOCX, EPUB, HTML, and FB2 documents, process files in an isolated workspace, and download the finished result as a ZIP.</p>
+                </div>
             </div>
-        </div>
-    </div>
-    {% endblock %}
+        </section>
+        <section class="auth-form-panel">
+            <form class="auth-form" action="{{ url_for('login') }}" method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <h2>Welcome back</h2>
+                <p class="auth-form-description">Sign in to manage settings and process your documents.</p>
+                <label for="username">Username</label>
+                <input id="username" name="username" autocomplete="username" required minlength="4" maxlength="62">
+                <label for="password">Password</label>
+                <input id="password" name="password" type="password" autocomplete="current-password" required minlength="4" maxlength="128">
+                <button class="button button-primary button-block" type="submit" name="subm">Sign in</button>
+            </form>
+            <p class="auth-alternative">New to Text Evolver? <a href="{{ url_for('register_page') }}">Create an account</a></p>
+        </section>
+    </main>
+{% endblock %}

@@ -1,54 +1,76 @@
 {% extends "logged_basis.html" %}
 
 {% block main_content %}
-    <div class="row">
-        <div class="col">
-            {% if user.settings[0] is defined %} {# checking if there are elements at all #}
-            {% for setting in user.settings %}
-            <div class="row no-gutters" id="{{ setting.id }}">
-                <div class="col-auto">
-                    <p class="text_big set_number">{{ loop.index }}</p>
-                </div>
-                <div class="col">
-                    <a href="{{ url_for('setting', setting_id=setting.id) }}" class="text_usual set_link middle">{{ setting.name }}</a>
-                    <button onclick="Show_confirm(this)" class="text_usual control_buttons middle" style="visibility: visible;">Delete</button>
-                    <button onclick="Reject_confirm(this)" class="text_usual control_buttons middle" style="visibility: hidden;">Cancel</button>
-                    <button onclick="Delete_set(this)" class="text_usual control_buttons middle" name="{{ setting.id }}" style="visibility: hidden;">Confirm</button>
-                </div>
+    <section class="page workspace-page">
+        <header class="page-heading">
+            <div>
+                <p class="eyebrow">Your workspace</p>
+                <h1>Settings</h1>
+                <p>Build reusable rules, then run them on your documents.</p>
             </div>
-            {% if loop.last %}
-                {% if loop.index==limit %}
-            <div class="row no-gutters">
-                <div class="col">
-                    <form action="{{ url_for('add_set') }}" method="POST">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                        <input type="submit" class="text_usual control_buttons" name="New_setting" value="Add new setting" disabled>
-                    </form>
-                </div>
-            </div>
+        </header>
+
+        <section class="panel settings-panel" aria-label="Saved settings">
+            <header class="panel-heading">
+                <h2>Saved settings</h2>
+                <span><span data-settings-count>{{ user.settings|length }}</span> of {{ limit }}</span>
+            </header>
+
+            <div class="settings-list">
+                {% for setting in user.settings %}
+                <article class="setting-row" id="{{ setting.id }}" data-setting-row>
+                    <a href="{{ url_for('setting', setting_id=setting.id) }}" class="setting-row-main">
+                        <span class="setting-number">{{ "%02d"|format(loop.index) }}</span>
+                        <span class="setting-summary">
+                            <strong class="setting-link">{{ setting.name }}</strong>
+                            <span>{{ "Public" if setting.public else "Private" }}</span>
+                        </span>
+                    </a>
+                    <button class="settings-menu-trigger" type="button"
+                            aria-label="Actions for {{ setting.name }}"
+                            aria-controls="settings-menu-{{ setting.id }}"
+                            aria-expanded="false"
+                            onclick="Toggle_settings_menu(this, event)">
+                        <i class="fas fa-ellipsis-h" aria-hidden="true"></i>
+                    </button>
+                    <div class="settings-menu" id="settings-menu-{{ setting.id }}" hidden onclick="event.stopPropagation()">
+                        <div data-menu-default>
+                            <a href="{{ url_for('setting', setting_id=setting.id) }}" class="settings-menu-item">
+                                <i class="fas fa-pen" aria-hidden="true"></i>
+                                Edit setting
+                            </a>
+                            <button type="button" class="settings-menu-item settings-menu-delete" onclick="Show_confirm(this)">
+                                <i class="far fa-trash-alt" aria-hidden="true"></i>
+                                Delete setting
+                            </button>
+                        </div>
+                        <div class="settings-menu-confirm" data-menu-confirm hidden>
+                            <p>Delete this setting?</p>
+                            <div>
+                                <button type="button" class="button button-quiet" onclick="Reject_confirm(this)">Cancel</button>
+                                <button type="button" class="button button-danger" name="{{ setting.id }}" onclick="Delete_set(this)">Confirm</button>
+                            </div>
+                        </div>
+                    </div>
+                </article>
                 {% else %}
-            <div class="row no-gutters">
-                <div class="col">
-                    <form action="{{ url_for('add_set') }}" method="POST">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                        <input type="submit" class="text_usual control_buttons" name="New_setting" value="Add new setting">
-                    </form>
+                <div class="empty-state">
+                    <h2>No settings yet</h2>
+                    <p>Create a setting to start building document conversion rules.</p>
                 </div>
+                {% endfor %}
             </div>
-                {% endif %}
-            {% endif %}
-            {% endfor %}
-            {% else %}
-            <div class="row no-gutters">
-                <div class="col">
-                    <p class="text_usual set_link">You have no settings currently</p>
-                    <form action="{{ url_for('add_set') }}" method="POST">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                        <input type="submit" class="text_usual control_buttons" name="New_setting" value="Add new setting">
-                    </form>
-                </div>
-            </div>
-            {% endif %}
-        </div>
-    </div>
+
+            <footer class="panel-footer">
+                <form action="{{ url_for('add_set') }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="button" name="New_setting"
+                            {{ 'disabled' if user.settings|length >= limit else '' }}>
+                        <i class="fas fa-plus" aria-hidden="true"></i>
+                        Add setting
+                    </button>
+                </form>
+            </footer>
+        </section>
+    </section>
 {% endblock %}
