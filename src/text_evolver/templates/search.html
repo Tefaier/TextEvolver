@@ -1,12 +1,7 @@
 {% extends "logged_basis.html" %}
 
 {% block main_content %}
-    <div class="row text_usual">
-        <div class="col">
-            <button class="control_buttons" onclick="Open_exp(this)" aria-haspopup="dialog" aria-controls="Explanation" aria-expanded="false">Show explanations</button>
-            <br>
-        </div>
-    </div>
+    <button type="button" class="explanation-trigger" onclick="Open_exp(this)" aria-label="Open explanations" aria-haspopup="dialog" aria-controls="Explanation" aria-expanded="false">?</button>
     <div hidden id="Explanation" class="explanation-backdrop" role="dialog" aria-modal="true" aria-labelledby="explanation-title" onclick="Close_exp(event)">
         <div class="explanation-popup text_usual">
             <div class="explanation-header">

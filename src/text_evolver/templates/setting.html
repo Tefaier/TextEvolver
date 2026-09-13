@@ -133,12 +133,7 @@
             </div>
         </div>
     </div>
-    <div class="row text_usual">
-        <div class="col">
-            <button class="control_buttons" onclick="Open_exp(this)" aria-haspopup="dialog" aria-controls="Explanation" aria-expanded="false">Show explanations</button>
-            <br>
-        </div>
-    </div>
+    <button type="button" class="explanation-trigger" onclick="Open_exp(this)" aria-label="Open explanations" aria-haspopup="dialog" aria-controls="Explanation" aria-expanded="false">?</button>
     <div hidden id="Explanation" class="explanation-backdrop" role="dialog" aria-modal="true" aria-labelledby="explanation-title" onclick="Close_exp(event)">
         <div class="explanation-popup text_usual">
             <div class="explanation-header">
@@ -513,7 +508,9 @@
                 <hr class="new" />
                 <div class="row">
                     <div class="col">
+                        <button class="control_buttons" type="button" onclick="window.location.href='{{ url_for('my_settings') }}'">Close</button>
                         {% if setting.owner_id == user.id %}
+                        <button class="control_buttons" type="button" onclick="window.location.href='{{ url_for('setting', setting_id=setting.id) }}'">Reset</button>
                         <input class="control_buttons" type="submit" name="save" value="Save">
                         <input class="control_buttons" type="submit" name="save_run" id="RunS" value="Save and run{{ '' if (files_situation[0]==0 and files_situation[1]==0) else ' (disabled)' }}" disabled>
                         {% else %}

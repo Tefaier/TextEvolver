@@ -214,10 +214,21 @@ def test_create_setting_and_enqueue_upload(registered_client: TestClient, databa
     assert 'name="phrase_regex"' in page.text
     assert 'onchange="Sync_phrase_regex(this)"' in page.text
     assert "data-phrase-regex-fallback" in page.text
+    assert 'class="explanation-trigger"' in page.text
+    assert 'aria-label="Open explanations"' in page.text
+    assert 'aria-expanded="false">?</button>' in page.text
     assert 'class="explanation-backdrop"' in page.text
     assert 'class="explanation-popup text_usual"' in page.text
     assert 'aria-label="Close explanations"' in page.text
     assert 'onclick="Close_exp(event)"' in page.text
+    assert (
+        "type=\"button\" onclick=\"window.location.href='http://testserver/my_settings'\">Cancel</button>"
+        in page.text
+    )
+    assert (
+        f"type=\"button\" onclick=\"window.location.href='http://testserver/setting/{setting_id}'\">Reset</button>"
+        in page.text
+    )
     token = csrf_from(page)
     response = registered_client.post(
         f"/setting/{setting_id}",
