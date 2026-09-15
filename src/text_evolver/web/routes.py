@@ -48,6 +48,13 @@ from text_evolver.web.auth import (
     validate_csrf,
     verify_password,
 )
+from text_evolver.web.login_throttle import (
+    clear_login_failure,
+    client_ip,
+    lock_login_failure,
+    login_is_blocked,
+    record_login_failure,
+)
 from text_evolver.web.processing_status import ProcessingConnectionLimiter, wait_for_disconnect
 
 router = APIRouter()
@@ -92,7 +99,9 @@ def validation_error_response(
             status_code=status_code,
         )
     flash(request, message)
-    return render(request, template_name, **values)
+    response = render(request, template_name, **values)
+    response.status_code = status_code
+    return response
 
 
 def form_redirect(request: Request, endpoint: str, **params: object) -> Response:
@@ -216,6 +225,16 @@ async def login_submit(
     form = await request.form()
     username = str(form.get("username", "")).strip()
     password = str(form.get("password", ""))
+    ip = client_ip(request.client.host if request.client is not None else None)
+    now = dt.datetime.now(dt.UTC)
+    login_failure = lock_login_failure(session, username, ip)
+    if login_is_blocked(login_failure, now):
+        return validation_error_response(
+            request,
+            "Too many failed login attempts. Try again later",
+            "loging.html",
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        )
     user = session.scalar(select(UserAccount).where(UserAccount.username == username))
     stored_password = (
         None
@@ -223,12 +242,14 @@ async def login_submit(
         else session.scalar(select(UserPassword).where(UserPassword.user_id == user.id))
     )
     if user is None or stored_password is None or not verify_password(password, stored_password, app_settings):
+        record_login_failure(session, login_failure, username, ip, now)
         return validation_error_response(
             request,
             "User with these username and password does not exist",
             "loging.html",
         )
-    user.last_entry = dt.datetime.now(dt.UTC)
+    clear_login_failure(session, username, ip)
+    user.last_entry = now
     login(request, user)
     flash(request, f"You successfully logged into account {user.username}", "success")
     return form_redirect(request, "my_settings")

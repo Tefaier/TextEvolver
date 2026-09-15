@@ -31,8 +31,8 @@ from text_evolver.main import create_app  # noqa: E402
 def database(tmp_path: Path):
     database_path = tmp_path / "test.db"
     connection = __import__("sqlite3").connect(database_path)
-    migration = Path("migrations/sql/sqlite/V1__initial_schema.sql").read_text(encoding="utf-8")
-    connection.executescript(migration)
+    for migration_path in sorted(Path("migrations/sql/sqlite").glob("V*.sql")):
+        connection.executescript(migration_path.read_text(encoding="utf-8"))
     connection.close()
     engine = create_engine(f"sqlite+pysqlite:///{database_path}", connect_args={"check_same_thread": False})
 

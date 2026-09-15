@@ -85,8 +85,11 @@ podman compose up --build
 --build causes local build images to rebuild
 --force-recreate recreates containers even if their configuration in compose have not changed yet they are already removed by `docker compose down`
 
-The stack contains PostgreSQL, PgBouncer, a one-shot Flyway migration service,
-MinIO, a one-shot MinIO bucket initializer, the FastAPI server, and one worker.
+The stack contains nginx, PostgreSQL, PgBouncer, a one-shot Flyway migration
+service, MinIO, a one-shot MinIO bucket initializer, the FastAPI server, and
+one worker. Only nginx publishes the application port. It applies a general
+per-IP request limit and a stricter limit to `/login`; TLS termination is not
+configured yet.
 PostgreSQL is not published to the host;
 host and application connections go through PgBouncer on port 6432. Flyway is
 the only service that connects directly to PostgreSQL. App and worker contact
@@ -188,18 +191,22 @@ are mocked in deterministic tests; no MinIO smoke test is included.
 
 ### Password-key rotation
 
-Passwords are stored in `user_password` as AES-256-GCM ciphertext with a fresh,
-database-unique 12-byte nonce and the key version; the authentication tag is
-part of the ciphertext. Registration retries nonce generation if the database
+New passwords must contain 12 to 128 characters. They are stored in
+`user_password` as AES-256-GCM ciphertext with a fresh, database-unique 12-byte
+nonce and the key version; the authentication tag is part of the ciphertext.
+Associated data binds new ciphertext to its user and key-version fields, so
+moving a ciphertext to another user or tampering with those fields makes
+authentication fail. Registration retries nonce generation if the database
 detects a collision. Keys remain only in application configuration and must
 never be committed or logged.
 
 To rotate keys, move the existing current key and version to
 `PASSWORD_KEY_PREVIOUS` and `PASSWORD_KEY_PREVIOUS_VERSION`, generate a new
 current key, and increment the current version. A successful login using the
-previous key continues using that stored key version. Keep the previous key
-configured while any password records use it; records using unavailable key
-versions cannot authenticate.
+previous key continues using that stored key version. Password rows created
+with any supported key version use the same associated-data binding. Keep the
+previous key configured while any password records use it; records using
+unavailable key versions cannot authenticate.
 
 Upgrade all previous-version records in committed batches before removing the
 previous key:
@@ -210,3 +217,13 @@ previous key:
 
 The command is resumable and leaves records already using the current version
 unchanged. See [migrations/README.md](migrations/README.md) for details.
+
+### Login throttling
+
+nginx limits all requests from one IP to 20 requests per second with a burst of
+40, and `/login` to 10 requests per minute with a burst of 5. The application
+also records failed `(username, IP)` pairs. Five failures within ten minutes
+block further attempts. After ten minutes, one attempt is allowed; another
+failure moves the window forward without resetting the failure count. A
+successful login removes the pair. The worker checks every minute and removes
+records whose window started more than one hour ago.

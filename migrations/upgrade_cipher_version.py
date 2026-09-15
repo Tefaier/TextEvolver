@@ -15,12 +15,20 @@ PASSWORD_NONCE_BYTES = 12
 PASSWORD_NONCE_INSERT_ATTEMPTS = 5
 
 
+def password_associated_data(user_id: int, key_version: int) -> bytes:
+    return f"text-evolver:user-password:v1:{user_id}:{key_version}".encode()
+
+
 def decrypt_password(stored: UserPassword, settings: AppSettings) -> str:
     key = settings.password_key_for_version(stored.key_version)
     if key is None or len(stored.nonce) != PASSWORD_NONCE_BYTES:
         raise RuntimeError(f"Password key version {stored.key_version} is unavailable")
     try:
-        decrypted = AESGCM(key).decrypt(stored.nonce, stored.encoded_password, None)
+        decrypted = AESGCM(key).decrypt(
+            stored.nonce,
+            stored.encoded_password,
+            password_associated_data(stored.user_id, stored.key_version),
+        )
         return decrypted.decode("utf-8")
     except (InvalidTag, UnicodeDecodeError, ValueError) as exc:
         raise RuntimeError(f"Password record {stored.id} could not be decrypted") from exc
@@ -32,12 +40,13 @@ def replace_encrypted_password(
     password: str,
     settings: AppSettings,
 ) -> None:
+    associated_data = password_associated_data(stored.user_id, settings.password_key_current_version)
     for _ in range(PASSWORD_NONCE_INSERT_ATTEMPTS):
         nonce = secrets.token_bytes(PASSWORD_NONCE_BYTES)
         encoded_password = AESGCM(settings.current_password_key).encrypt(
             nonce,
             password.encode("utf-8"),
-            None,
+            associated_data,
         )
         try:
             with session.begin_nested():

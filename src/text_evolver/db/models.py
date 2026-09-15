@@ -8,6 +8,19 @@ class Base(DeclarativeBase):
     pass
 
 
+class LoginFailure(Base):
+    __tablename__ = 'login_failure'
+    __table_args__ = (
+        CheckConstraint('failure_count >= 1'),
+        Index('ix_login_failure_window_started_at', 'window_started_at')
+    )
+
+    username: Mapped[str] = mapped_column(Text, primary_key=True)
+    ip: Mapped[str] = mapped_column(Text, primary_key=True)
+    failure_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    window_started_at: Mapped[datetime.datetime] = mapped_column(TIMESTAMP, nullable=False)
+
+
 class UserAccount(Base):
     __tablename__ = 'user_account'
 

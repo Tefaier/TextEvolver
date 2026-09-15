@@ -33,6 +33,8 @@ FALSY = {"false", "0", "no", "off"}
 IMAGE_UPLOAD_FIELD_PREFIX = "image_files_"
 IMAGE_ROW_TOKEN_PATTERN = re.compile(r"[a-zA-Z0-9_-]{1,80}")
 SETTING_TEXT_MAX_LENGTH = 64
+PASSWORD_MIN_LENGTH = 12
+PASSWORD_MAX_LENGTH = 128
 
 
 class ValidationError(ValueError):
@@ -92,8 +94,10 @@ def _setting_text(value: Any, field_name: str, *, strip: bool = False, required:
 def validate_credentials(username: str, password: str, confirm: str | None = None) -> None:
     if not 4 <= len(username) <= 62:
         raise ValidationError("Username must contain between 4 and 62 characters")
-    if not 4 <= len(password) <= 128:
-        raise ValidationError("Password must contain between 4 and 128 characters")
+    if not PASSWORD_MIN_LENGTH <= len(password) <= PASSWORD_MAX_LENGTH:
+        raise ValidationError(
+            f"Password must contain between {PASSWORD_MIN_LENGTH} and {PASSWORD_MAX_LENGTH} characters"
+        )
     if confirm is not None and confirm != password:
         raise ValidationError("Password confirmation does not match")
 

@@ -1,11 +1,20 @@
+import datetime as dt
 import threading
 from contextlib import contextmanager
 from pathlib import Path
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 import text_evolver.worker as worker
-from text_evolver.db.models import ImageConversion, ImageConversionFile, ProcessingJob, Setting, UserAccount
+from text_evolver.db.models import (
+    ImageConversion,
+    ImageConversionFile,
+    LoginFailure,
+    ProcessingJob,
+    Setting,
+    UserAccount,
+)
 from text_evolver.services import job_paths, request_job_cancellation
 
 
@@ -142,6 +151,35 @@ def test_worker_startup_cleanup_preserves_pokemon_cache(app_settings):
     assert not abandoned.exists()
     assert (app_settings.temp_root / "jobs").is_dir()
     assert pokemon_image.read_bytes() == b"pokemon"
+
+
+def test_worker_deletes_login_failures_older_than_one_hour(monkeypatch, database, app_settings):
+    install_worker_database(monkeypatch, database, app_settings)
+    now = dt.datetime.now(dt.UTC)
+    with Session(database) as session:
+        session.add_all(
+            [
+                LoginFailure(
+                    username="expired-user",
+                    ip="192.0.2.1",
+                    failure_count=5,
+                    window_started_at=now - dt.timedelta(hours=1, seconds=1),
+                ),
+                LoginFailure(
+                    username="recent-user",
+                    ip="192.0.2.2",
+                    failure_count=1,
+                    window_started_at=now - dt.timedelta(minutes=59),
+                ),
+            ]
+        )
+        session.commit()
+
+    assert worker.LOGIN_FAILURE_CLEANUP_SECONDS == 60
+    assert worker.cleanup_expired_login_failures(now) == 1
+    with Session(database) as session:
+        assert session.scalar(select(LoginFailure).where(LoginFailure.username == "expired-user")) is None
+        assert session.scalar(select(LoginFailure).where(LoginFailure.username == "recent-user")) is not None
 
 
 def test_queued_cancellation_and_restart_recovery(monkeypatch, database, app_settings):

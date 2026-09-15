@@ -1,3 +1,4 @@
+import datetime as dt
 import secrets
 import time
 
@@ -12,6 +13,7 @@ from starlette.websockets import WebSocketDisconnect
 from text_evolver.db.models import (
     ImageConversion,
     ImageConversionFile,
+    LoginFailure,
     ProcessingJob,
     Setting,
     UserAccount,
@@ -85,6 +87,66 @@ def test_form_validation_error_is_returned_for_popup_without_redirect(client: Te
     }
 
 
+def test_login_blocks_after_five_failures_and_shifts_expired_window(client: TestClient, database):
+    token = csrf_from(client.get("/login"))
+    login_data = {"csrf_token": token, "username": "missing-user", "password": "wrong-password"}
+
+    for _ in range(5):
+        assert client.post("/login", data=login_data).status_code == 422
+    assert client.post("/login", data=login_data).status_code == 429
+
+    with Session(database) as session:
+        failure = session.scalar(select(LoginFailure).where(LoginFailure.username == "missing-user"))
+        assert failure is not None
+        assert failure.failure_count == 5
+        failure.window_started_at = dt.datetime.now(dt.UTC) - dt.timedelta(minutes=10, seconds=1)
+        session.commit()
+
+    assert client.post("/login", data=login_data).status_code == 422
+    assert client.post("/login", data=login_data).status_code == 429
+    with Session(database) as session:
+        failure = session.scalar(select(LoginFailure).where(LoginFailure.username == "missing-user"))
+        assert failure is not None
+        assert failure.failure_count == 6
+        assert failure.window_started_at > dt.datetime.now(dt.UTC).replace(tzinfo=None) - dt.timedelta(minutes=1)
+
+
+def test_successful_login_clears_failure_row(registered_client: TestClient, database):
+    token = csrf_from(registered_client.get("/my_settings"))
+    registered_client.post("/logout", data={"csrf_token": token})
+    token = csrf_from(registered_client.get("/login"))
+
+    for _ in range(3):
+        response = registered_client.post(
+            "/login",
+            data={"csrf_token": token, "username": "reader", "password": "wrong-password"},
+        )
+        assert response.status_code == 422
+    response = registered_client.post(
+        "/login",
+        data={"csrf_token": token, "username": "reader", "password": "correct horse"},
+    )
+    assert response.status_code == 200
+
+    with Session(database) as session:
+        assert session.scalar(select(LoginFailure).where(LoginFailure.username == "reader")) is None
+
+
+def test_registration_requires_a_twelve_character_password(client: TestClient, database):
+    page = client.get("/register")
+    assert page.text.count('minlength="12"') == 2
+    token = csrf_from(page)
+    response = client.post(
+        "/register",
+        data={"csrf_token": token, "username": "short-user", "password": "short-pass", "confirm": "short-pass"},
+    )
+
+    assert response.status_code == 422
+    assert "Password must contain between 12 and 128 characters" in response.text
+    with Session(database) as session:
+        assert session.scalar(select(UserAccount).where(UserAccount.username == "short-user")) is None
+
+
 def test_json_form_success_preserves_flash_for_redirect_destination(client: TestClient):
     token = csrf_from(client.get("/register"))
 
@@ -121,7 +183,7 @@ def test_login_accepts_password_encrypted_with_previous_key(client: TestClient, 
         user = UserAccount(username="rotating-user")
         session.add(user)
         session.flush()
-        encrypted = encrypt_password("old-key-password", previous_settings)
+        encrypted = encrypt_password("old-key-password", user.id, previous_settings)
         stored = UserPassword(
             user_id=user.id,
             encoded_password=encrypted.encoded_password,

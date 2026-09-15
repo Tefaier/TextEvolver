@@ -6,7 +6,7 @@ from text_evolver.web.auth import encrypt_password, verify_password
 
 
 def _stored_password(password: str, user_id: int, settings: AppSettings) -> UserPassword:
-    encrypted = encrypt_password(password, settings)
+    encrypted = encrypt_password(password, user_id, settings)
     return UserPassword(
         user_id=user_id,
         encoded_password=encrypted.encoded_password,
@@ -27,6 +27,13 @@ def test_password_ciphertext_uses_key_version(app_settings):
 def test_password_ciphertext_tampering_fails_authentication(app_settings):
     stored = _stored_password("secret password", user_id=7, settings=app_settings)
     stored.encoded_password = bytes([stored.encoded_password[0] ^ 1]) + stored.encoded_password[1:]
+
+    assert not verify_password("secret password", stored, app_settings)
+
+
+def test_password_ciphertext_is_bound_to_user_row(app_settings):
+    stored = _stored_password("secret password", user_id=7, settings=app_settings)
+    stored.user_id = 8
 
     assert not verify_password("secret password", stored, app_settings)
 

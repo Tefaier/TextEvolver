@@ -11,10 +11,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import psutil
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 
 from text_evolver.config import AppSettings, get_application_settings
-from text_evolver.db.models import ProcessingJob
+from text_evolver.db.models import LoginFailure, ProcessingJob
 from text_evolver.db.session import session_scope
 from text_evolver.image_storage import ImageStorage, get_image_storage
 from text_evolver.processing.pokemon_cache import refresh_pokemon_cache
@@ -24,6 +24,8 @@ from text_evolver.services import job_paths
 
 LOGGER = logging.getLogger("text_evolver.worker")
 PROCESS_CONTEXT = multiprocessing.get_context("spawn")
+LOGIN_FAILURE_RETENTION = dt.timedelta(hours=1)
+LOGIN_FAILURE_CLEANUP_SECONDS = 60
 
 
 @dataclass(frozen=True)
@@ -50,6 +52,25 @@ def recover_interrupted_jobs() -> int:
             )
         )
         return result.rowcount or 0
+
+
+def cleanup_expired_login_failures(now: dt.datetime | None = None) -> int:
+    cutoff = (now or utcnow()) - LOGIN_FAILURE_RETENTION
+    with session_scope() as session:
+        result = session.execute(delete(LoginFailure).where(LoginFailure.window_started_at < cutoff))
+        return result.rowcount or 0
+
+
+def run_login_failure_cleanup(stopping: threading.Event) -> None:
+    while not stopping.is_set():
+        try:
+            deleted = cleanup_expired_login_failures()
+        except Exception:
+            LOGGER.exception("Could not clean expired login failure records")
+        else:
+            if deleted:
+                LOGGER.info("Deleted %s expired login failure record(s)", deleted)
+        stopping.wait(LOGIN_FAILURE_CLEANUP_SECONDS)
 
 
 def claim_job() -> ClaimedJob | None:
@@ -195,19 +216,21 @@ def run_worker_slot(slot: int, settings: AppSettings, stopping: threading.Event)
 
 def run_worker_pool(settings: AppSettings, stopping: threading.Event) -> None:
     with ThreadPoolExecutor(
-        max_workers=settings.worker_concurrency,
+        max_workers=settings.worker_concurrency + 1,
         thread_name_prefix="text-evolver-worker",
     ) as executor:
-        futures = [
+        slot_futures = [
             executor.submit(run_worker_slot, slot, settings, stopping)
             for slot in range(1, settings.worker_concurrency + 1)
         ]
+        cleanup_future = executor.submit(run_login_failure_cleanup, stopping)
+        futures = [*slot_futures, cleanup_future]
         try:
             while not stopping.wait(1):
                 for future in futures:
                     if future.done():
                         future.result()
-                        raise RuntimeError("A worker slot stopped unexpectedly")
+                        raise RuntimeError("A worker task stopped unexpectedly")
         finally:
             stopping.set()
             for future in futures:

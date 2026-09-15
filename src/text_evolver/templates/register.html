@@ -21,9 +21,9 @@
                 <label for="username">Username</label>
                 <input id="username" name="username" autocomplete="username" required minlength="4" maxlength="62">
                 <label for="password">Password</label>
-                <input id="password" name="password" type="password" autocomplete="new-password" required minlength="4" maxlength="128">
+                <input id="password" name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="128">
                 <label for="confirm">Repeat password</label>
-                <input id="confirm" name="confirm" type="password" autocomplete="new-password" required minlength="4" maxlength="128">
+                <input id="confirm" name="confirm" type="password" autocomplete="new-password" required minlength="12" maxlength="128">
                 <button class="button button-primary button-block" type="submit" name="reg">Register</button>
             </form>
             <p class="auth-alternative">Already registered? <a href="{{ url_for('login_page') }}">Sign in instead</a></p>

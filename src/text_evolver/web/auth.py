@@ -22,15 +22,23 @@ class EncryptedPassword:
     key_version: int
 
 
-def encrypt_password(password: str, settings: AppSettings) -> EncryptedPassword:
+def password_associated_data(user_id: int, key_version: int) -> bytes:
+    return f"text-evolver:user-password:v1:{user_id}:{key_version}".encode()
+
+
+def encrypt_password(password: str, user_id: int, settings: AppSettings) -> EncryptedPassword:
     key_version = settings.password_key_current_version
     nonce = secrets.token_bytes(PASSWORD_NONCE_BYTES)
     encoded_password = AESGCM(settings.current_password_key).encrypt(
         nonce,
         password.encode("utf-8"),
-        None
+        password_associated_data(user_id, key_version),
     )
-    return EncryptedPassword(encoded_password=encoded_password, nonce=nonce, key_version=key_version)
+    return EncryptedPassword(
+        encoded_password=encoded_password,
+        nonce=nonce,
+        key_version=key_version,
+    )
 
 
 def add_encrypted_password(
@@ -40,7 +48,7 @@ def add_encrypted_password(
     settings: AppSettings,
 ) -> UserPassword:
     for _ in range(PASSWORD_NONCE_INSERT_ATTEMPTS):
-        encrypted = encrypt_password(password, settings)
+        encrypted = encrypt_password(password, user_id, settings)
         stored = UserPassword(
             user_id=user_id,
             encoded_password=encrypted.encoded_password,
@@ -72,7 +80,7 @@ def verify_password(password: str, stored: UserPassword, settings: AppSettings) 
         decrypted = AESGCM(key).decrypt(
             stored.nonce,
             stored.encoded_password,
-            None,
+            password_associated_data(stored.user_id, stored.key_version),
         )
     except (InvalidTag, ValueError):
         return False

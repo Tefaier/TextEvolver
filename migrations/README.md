@@ -35,7 +35,7 @@ diff; do not add application behavior to that file.
 `FLYWAY_COMMAND` and `SQLACODEGEN_COMMAND` may point to non-default executable
 names or absolute executable paths.
 
-## Upgrade the password cipher key version
+## Upgrade password encryption
 
 Configure both the current and previous password keys in the root application
 `.env`, then run from the repository root:
@@ -46,10 +46,10 @@ Configure both the current and previous password keys in the root application
 
 The script connects through the application's `DATABASE_URL`. Each batch locks
 rows using the configured previous key version, decrypts them with that key,
-re-encrypts them with the current key and a new unique nonce, and commits the
-batch. Completed batches remain committed if a later batch fails, so rerunning
-the same command resumes the upgrade. Rows already using the current version
-are not changed.
+and re-encrypts them with the current key, a new unique nonce, and associated
+data bound to the user and key version. It then commits the batch. Completed
+batches remain committed if a later batch fails, so rerunning the same command
+resumes the upgrade. Rows already using the current version are not changed.
 
 Keep `PASSWORD_KEY_PREVIOUS` and `PASSWORD_KEY_PREVIOUS_VERSION` configured
 until the script reports that no more records were upgraded. Do not put these
