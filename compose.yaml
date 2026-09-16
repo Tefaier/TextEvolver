@@ -29,8 +29,8 @@ services:
       LISTEN_PORT: 6432
       MAX_CLIENT_CONN: 200
       DEFAULT_POOL_SIZE: 20
-    ports:
-      - "6432:6432"
+    expose:
+      - "6432"
     depends_on:
       postgres:
         condition: service_healthy
@@ -64,9 +64,9 @@ services:
     environment:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
-    ports:
-      - "${MINIO_API_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    expose:
+      - "9000"
+      - "9001"
     volumes:
       - user-data:/data
     healthcheck:
@@ -100,10 +100,6 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@pgbouncer:6432/${POSTGRES_DB}
       SECRET_KEY: ${SECRET_KEY}
-      PASSWORD_KEY_CURRENT: ${PASSWORD_KEY_CURRENT}
-      PASSWORD_KEY_CURRENT_VERSION: ${PASSWORD_KEY_CURRENT_VERSION}
-      PASSWORD_KEY_PREVIOUS: ${PASSWORD_KEY_PREVIOUS:-}
-      PASSWORD_KEY_PREVIOUS_VERSION: ${PASSWORD_KEY_PREVIOUS_VERSION:-}
       WORK_ROOT: /data/work
       TEMP_ROOT: /data/tmp
       S3_ENDPOINT_URL: http://minio:9000
@@ -118,7 +114,7 @@ services:
       RESULTS_PER_PAGE: ${RESULTS_PER_PAGE:-50}
       WEBSOCKET_UPDATE_SECONDS: ${WEBSOCKET_UPDATE_SECONDS:-5}
       WEBSOCKET_MAX_CONNECTIONS: ${WEBSOCKET_MAX_CONNECTIONS:-100}
-    command: ["uvicorn", "text_evolver.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]
+    command: ["uvicorn", "text_evolver.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=172.30.0.10"]
     expose:
       - "8000"
     volumes:
@@ -132,6 +128,10 @@ services:
       minio-init:
         condition: service_completed_successfully
     restart: unless-stopped
+    networks:
+      frontend:
+        ipv4_address: 172.30.0.20
+      default:
 
   nginx:
     image: nginx:1.27-alpine
@@ -148,6 +148,9 @@ services:
       timeout: 3s
       retries: 5
     restart: unless-stopped
+    networks:
+      frontend:
+        ipv4_address: 172.30.0.10
 
   worker:
     image: text-evolver:local
@@ -155,10 +158,6 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@pgbouncer:6432/${POSTGRES_DB}
       SECRET_KEY: ${SECRET_KEY}
-      PASSWORD_KEY_CURRENT: ${PASSWORD_KEY_CURRENT}
-      PASSWORD_KEY_CURRENT_VERSION: ${PASSWORD_KEY_CURRENT_VERSION}
-      PASSWORD_KEY_PREVIOUS: ${PASSWORD_KEY_PREVIOUS:-}
-      PASSWORD_KEY_PREVIOUS_VERSION: ${PASSWORD_KEY_PREVIOUS_VERSION:-}
       WORK_ROOT: /data/work
       TEMP_ROOT: /data/tmp
       S3_ENDPOINT_URL: http://minio:9000
@@ -189,3 +188,10 @@ volumes:
   work-data:
   temp-data:
   user-data:
+
+networks:
+  default:
+  frontend:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24

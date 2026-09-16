@@ -1,61 +1,39 @@
-from pydantic import ValidationError
+from argon2 import PasswordHasher, Type
 
-from text_evolver.config import AppSettings
 from text_evolver.db.models import UserPassword
-from text_evolver.web.auth import encrypt_password, verify_password
+from text_evolver.web.auth import hash_password, rehash_password_if_needed, verify_password
 
 
-def _stored_password(password: str, user_id: int, settings: AppSettings) -> UserPassword:
-    encrypted = encrypt_password(password, user_id, settings)
-    return UserPassword(
-        user_id=user_id,
-        encoded_password=encrypted.encoded_password,
-        nonce=encrypted.nonce,
-        key_version=encrypted.key_version,
-    )
+def _stored_password(password: str, user_id: int = 7) -> UserPassword:
+    return UserPassword(user_id=user_id, password_hash=hash_password(password))
 
 
-def test_password_ciphertext_uses_key_version(app_settings):
-    stored = _stored_password("secret password", user_id=7, settings=app_settings)
+def test_password_is_stored_as_argon2id_hash():
+    stored = _stored_password("secret password")
 
-    assert verify_password("secret password", stored, app_settings)
-
-    stored.key_version = app_settings.password_key_previous_version
-    assert not verify_password("secret password", stored, app_settings)
-
-
-def test_password_ciphertext_tampering_fails_authentication(app_settings):
-    stored = _stored_password("secret password", user_id=7, settings=app_settings)
-    stored.encoded_password = bytes([stored.encoded_password[0] ^ 1]) + stored.encoded_password[1:]
-
-    assert not verify_password("secret password", stored, app_settings)
+    assert stored.password_hash.startswith("$argon2id$")
+    assert "secret password" not in stored.password_hash
+    assert verify_password("secret password", stored)
+    assert not verify_password("wrong password", stored)
 
 
-def test_password_ciphertext_is_bound_to_user_row(app_settings):
-    stored = _stored_password("secret password", user_id=7, settings=app_settings)
-    stored.user_id = 8
+def test_invalid_password_hash_fails_authentication():
+    stored = UserPassword(user_id=7, password_hash="not-an-argon2-hash")
 
-    assert not verify_password("secret password", stored, app_settings)
-
-
-def test_password_with_unavailable_key_version_fails_authentication(app_settings):
-    stored = _stored_password("secret password", user_id=7, settings=app_settings)
-    stored.key_version = 999
-
-    assert not verify_password("secret password", stored, app_settings)
+    assert not verify_password("secret password", stored)
 
 
-def test_password_key_must_decode_to_32_bytes():
-    try:
-        AppSettings(
-            database_url="sqlite+pysqlite:///test.db",
-            secret_key="test-secret-key-with-at-least-thirty-two-characters",
-            password_key_current="dG9vLXNob3J0",
-            password_key_current_version=1,
-            password_key_previous=None,
-            password_key_previous_version=None,
-        )
-    except ValidationError as exc:
-        assert "exactly 32 bytes" in str(exc)
-    else:
-        raise AssertionError("Short AES key was accepted")
+def test_missing_user_runs_dummy_verification_and_fails():
+    assert not verify_password("secret password", None)
+
+
+def test_password_hash_is_upgraded_after_successful_verification():
+    old_hasher = PasswordHasher(time_cost=1, memory_cost=8192, parallelism=1, type=Type.ID)
+    stored = UserPassword(user_id=7, password_hash=old_hasher.hash("secret password"))
+    old_hash = stored.password_hash
+
+    assert verify_password("secret password", stored)
+    rehash_password_if_needed(stored, "secret password")
+
+    assert stored.password_hash != old_hash
+    assert verify_password("secret password", stored)

@@ -23,10 +23,9 @@ cp .env.example .env
 ```
 
 Set a random `SECRET_KEY`, database credentials, and `DATABASE_URL` in `.env`.
-Generate the initial AES-256-GCM password key with `openssl rand -base64 32`,
-store it as `PASSWORD_KEY_CURRENT`, and set `PASSWORD_KEY_CURRENT_VERSION=1`.
 Set unique `S3_ACCESS_KEY` and `S3_SECRET_KEY` values as well. Processes running
-directly on the host use `S3_ENDPOINT_URL=http://localhost:9000`.
+directly on the host use `S3_ENDPOINT_URL=http://localhost:9000` when a local
+S3-compatible service is separately exposed there.
 The application has no SQLite runtime fallback. Start the web process and the
 worker separately:
 
@@ -90,22 +89,16 @@ service, MinIO, a one-shot MinIO bucket initializer, the FastAPI server, and
 one worker. Only nginx publishes the application port. It applies a general
 per-IP request limit and a stricter limit to `/login`; TLS termination is not
 configured yet.
-PostgreSQL is not published to the host;
-host and application connections go through PgBouncer on port 6432. Flyway is
-the only service that connects directly to PostgreSQL. App and worker contact
-MinIO at `http://minio:9000`; only MinIO mounts `user-data` at `/data`.
+PostgreSQL, PgBouncer, and MinIO are not published to the host. Application and
+worker connections go through PgBouncer on the internal Compose network.
+Flyway is the only service that connects directly to PostgreSQL. App and worker
+contact MinIO at `http://minio:9000`; only MinIO mounts `user-data` at `/data`.
 
 Open <http://localhost:8000>. Health endpoints are available at
 `/health/live` and `/health/ready`.
 
-MinIO publishes its S3 endpoint at <http://localhost:9000> and management
-console at <http://localhost:9001>. The initializer creates `S3_BUCKET`
-idempotently after MinIO becomes healthy.
-
-Connect to database by
-```bash
-PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -p 6432 -U "$POSTGRES_USER" -d "$POSTGRES_DB"
-```
+The MinIO initializer creates `S3_BUCKET` idempotently after MinIO becomes
+healthy. Its S3 endpoint and management console remain internal to Compose.
 
 ### User image storage
 
@@ -165,10 +158,6 @@ are mocked in deterministic tests; no MinIO smoke test is included.
 | --- | --- |
 | `DATABASE_URL` | SQLAlchemy psycopg URL; Compose points it at PgBouncer |
 | `SECRET_KEY` | Signs session cookies; minimum 32 characters |
-| `PASSWORD_KEY_CURRENT` | Base64-encoded 32-byte AES-256-GCM key used for new password encryption |
-| `PASSWORD_KEY_CURRENT_VERSION` | Positive integer stored with passwords encrypted by the current key |
-| `PASSWORD_KEY_PREVIOUS` | Optional previous Base64-encoded 32-byte key accepted during rotation |
-| `PASSWORD_KEY_PREVIOUS_VERSION` | Previous key's version; must be set together with its key |
 | `WORK_ROOT` | Shared job input/output directory |
 | `TEMP_ROOT` | Temporary processing directory |
 | `S3_ENDPOINT_URL` | S3-compatible endpoint; host processes use `http://localhost:9000` |
@@ -177,8 +166,6 @@ are mocked in deterministic tests; no MinIO smoke test is included.
 | `S3_ACCESS_KEY` | S3 access key and local MinIO root username |
 | `S3_SECRET_KEY` | S3 secret key and local MinIO root password |
 | `S3_FORCE_PATH_STYLE` | Enables path-style addressing for MinIO |
-| `MINIO_API_PORT` | Host port for the MinIO S3 endpoint |
-| `MINIO_CONSOLE_PORT` | Host port for the MinIO management console |
 | `CHROME_BINARY` | Optional Chromium executable override |
 | `SELENIUMBASE_DRIVER_ROOT` | Ephemeral writable directory for SeleniumBase-generated drivers |
 | `COOKIE_SECURE` | Enables HTTPS-only session cookies |
@@ -189,34 +176,13 @@ are mocked in deterministic tests; no MinIO smoke test is included.
 | `WORKER_CONCURRENCY` | Maximum jobs processed concurrently by the worker (1-64) |
 | `WORKER_MIN_FREE_MEMORY_BYTES` | Memory threshold before claiming jobs |
 
-### Password-key rotation
+### Password storage
 
-New passwords must contain 12 to 128 characters. They are stored in
-`user_password` as AES-256-GCM ciphertext with a fresh, database-unique 12-byte
-nonce and the key version; the authentication tag is part of the ciphertext.
-Associated data binds new ciphertext to its user and key-version fields, so
-moving a ciphertext to another user or tampering with those fields makes
-authentication fail. Registration retries nonce generation if the database
-detects a collision. Keys remain only in application configuration and must
-never be committed or logged.
-
-To rotate keys, move the existing current key and version to
-`PASSWORD_KEY_PREVIOUS` and `PASSWORD_KEY_PREVIOUS_VERSION`, generate a new
-current key, and increment the current version. A successful login using the
-previous key continues using that stored key version. Password rows created
-with any supported key version use the same associated-data binding. Keep the
-previous key configured while any password records use it; records using
-unavailable key versions cannot authenticate.
-
-Upgrade all previous-version records in committed batches before removing the
-previous key:
-
-```bash
-.venv/bin/python migrations/upgrade_cipher_version.py --batch-size 100
-```
-
-The command is resumable and leaves records already using the current version
-unchanged. See [migrations/README.md](migrations/README.md) for details.
+New passwords must contain 12 to 128 characters. `user_password` stores only an
+Argon2id PHC hash; plaintext passwords and reversible encryption keys are not
+stored. Authentication performs a dummy Argon2id verification for unknown
+users to reduce username timing differences, and successful authentication
+upgrades hashes when the configured Argon2 parameters change.
 
 ### Login throttling
 
@@ -225,5 +191,8 @@ nginx limits all requests from one IP to 20 requests per second with a burst of
 also records failed `(username, IP)` pairs. Five failures within ten minutes
 block further attempts. After ten minutes, one attempt is allowed; another
 failure moves the window forward without resetting the failure count. A
-successful login removes the pair. The worker checks every minute and removes
-records whose window started more than one hour ago.
+username-wide failure score prevents IP rotation from bypassing throttling. At
+five failures it requires a minimum interval of one second between attempts;
+the interval doubles after each further failure up to 60 seconds. A successful
+login removes both records. The worker checks every minute and removes pair or
+account records whose relevant failure timestamp is more than one hour old.

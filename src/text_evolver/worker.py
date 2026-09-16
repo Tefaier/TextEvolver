@@ -14,7 +14,7 @@ import psutil
 from sqlalchemy import delete, select, update
 
 from text_evolver.config import AppSettings, get_application_settings
-from text_evolver.db.models import LoginFailure, ProcessingJob
+from text_evolver.db.models import LoginFailure, LoginFailureByAccount, ProcessingJob
 from text_evolver.db.session import session_scope
 from text_evolver.image_storage import ImageStorage, get_image_storage
 from text_evolver.processing.pokemon_cache import refresh_pokemon_cache
@@ -57,8 +57,11 @@ def recover_interrupted_jobs() -> int:
 def cleanup_expired_login_failures(now: dt.datetime | None = None) -> int:
     cutoff = (now or utcnow()) - LOGIN_FAILURE_RETENTION
     with session_scope() as session:
-        result = session.execute(delete(LoginFailure).where(LoginFailure.window_started_at < cutoff))
-        return result.rowcount or 0
+        pair_result = session.execute(delete(LoginFailure).where(LoginFailure.window_started_at < cutoff))
+        account_result = session.execute(
+            delete(LoginFailureByAccount).where(LoginFailureByAccount.last_failure_at < cutoff)
+        )
+        return (pair_result.rowcount or 0) + (account_result.rowcount or 0)
 
 
 def run_login_failure_cleanup(stopping: threading.Event) -> None:

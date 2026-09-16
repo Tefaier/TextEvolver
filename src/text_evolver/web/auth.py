@@ -1,90 +1,40 @@
 import hmac
 import secrets
-from dataclasses import dataclass
 
-from cryptography.exceptions import InvalidTag
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from argon2 import PasswordHasher, Type
+from argon2.exceptions import InvalidHashError, VerificationError
 from fastapi import HTTPException, Request, status
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from text_evolver.config import AppSettings
 from text_evolver.db.models import UserAccount, UserPassword
 
-PASSWORD_NONCE_BYTES = 12
-PASSWORD_NONCE_INSERT_ATTEMPTS = 5
+PASSWORD_HASHER = PasswordHasher(type=Type.ID)
+DUMMY_PASSWORD_HASH = PASSWORD_HASHER.hash(secrets.token_urlsafe(32))
 
 
-@dataclass(frozen=True, slots=True)
-class EncryptedPassword:
-    encoded_password: bytes
-    nonce: bytes
-    key_version: int
+def hash_password(password: str) -> str:
+    return PASSWORD_HASHER.hash(password)
 
 
-def password_associated_data(user_id: int, key_version: int) -> bytes:
-    return f"text-evolver:user-password:v1:{user_id}:{key_version}".encode()
+def add_password(session: Session, user_id: int, password: str) -> UserPassword:
+    stored = UserPassword(user_id=user_id, password_hash=hash_password(password))
+    session.add(stored)
+    session.flush()
+    return stored
 
 
-def encrypt_password(password: str, user_id: int, settings: AppSettings) -> EncryptedPassword:
-    key_version = settings.password_key_current_version
-    nonce = secrets.token_bytes(PASSWORD_NONCE_BYTES)
-    encoded_password = AESGCM(settings.current_password_key).encrypt(
-        nonce,
-        password.encode("utf-8"),
-        password_associated_data(user_id, key_version),
-    )
-    return EncryptedPassword(
-        encoded_password=encoded_password,
-        nonce=nonce,
-        key_version=key_version,
-    )
-
-
-def add_encrypted_password(
-    session: Session,
-    user_id: int,
-    password: str,
-    settings: AppSettings,
-) -> UserPassword:
-    for _ in range(PASSWORD_NONCE_INSERT_ATTEMPTS):
-        encrypted = encrypt_password(password, user_id, settings)
-        stored = UserPassword(
-            user_id=user_id,
-            encoded_password=encrypted.encoded_password,
-            nonce=encrypted.nonce,
-            key_version=encrypted.key_version,
-        )
-        try:
-            with session.begin_nested():
-                session.add(stored)
-                session.flush()
-        except IntegrityError as exception:
-            diagnostic = getattr(exception.orig, "diag", None)
-            message = str(exception.orig).lower()
-            if getattr(diagnostic, "constraint_name", None) == "uq_user_password_nonce" or (
-                "unique" in message and "user_password.nonce" in message
-            ):
-                continue
-            raise
-        else:
-            return stored
-    raise RuntimeError("Could not generate a unique password nonce")
-
-
-def verify_password(password: str, stored: UserPassword, settings: AppSettings) -> bool:
-    key = settings.password_key_for_version(stored.key_version)
-    if key is None or len(stored.nonce) != PASSWORD_NONCE_BYTES:
-        return False
+def verify_password(password: str, stored: UserPassword | None) -> bool:
+    password_hash = stored.password_hash if stored is not None else DUMMY_PASSWORD_HASH
     try:
-        decrypted = AESGCM(key).decrypt(
-            stored.nonce,
-            stored.encoded_password,
-            password_associated_data(stored.user_id, stored.key_version),
-        )
-    except (InvalidTag, ValueError):
+        valid = PASSWORD_HASHER.verify(password_hash, password)
+    except (InvalidHashError, VerificationError):
         return False
-    return hmac.compare_digest(decrypted, password.encode("utf-8"))
+    return stored is not None and valid
+
+
+def rehash_password_if_needed(stored: UserPassword, password: str) -> None:
+    if PASSWORD_HASHER.check_needs_rehash(stored.password_hash):
+        stored.password_hash = hash_password(password)
 
 
 def login(request: Request, user: UserAccount) -> None:

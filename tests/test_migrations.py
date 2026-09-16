@@ -19,6 +19,7 @@ def test_sqlite_flyway_baseline_is_fresh_and_complete(tmp_path: Path):
         "user_account",
         "user_password",
         "login_failure",
+        "login_failure_by_account",
         "setting",
         "fandom",
         "unit_conversion",
@@ -41,7 +42,7 @@ def test_sqlite_flyway_baseline_is_fresh_and_complete(tmp_path: Path):
     assert image_file_foreign_key is not None
     assert image_file_foreign_key[2] == "image_conversion"
     assert image_file_foreign_key[6].upper() == "CASCADE"
-    for table in tables - {"login_failure"}:
+    for table in tables - {"login_failure", "login_failure_by_account", "user_password"}:
         id_column = next(column for column in database.execute(f"PRAGMA table_info({table})") if column[1] == "id")
         assert id_column[3] == 1
         assert id_column[5] == 1
@@ -49,6 +50,14 @@ def test_sqlite_flyway_baseline_is_fresh_and_complete(tmp_path: Path):
         column[1] for column in database.execute("PRAGMA table_info(login_failure)") if column[5]
     }
     assert login_failure_primary_key == {"username", "ip"}
+    account_failure_primary_key = {
+        column[1] for column in database.execute("PRAGMA table_info(login_failure_by_account)") if column[5]
+    }
+    assert account_failure_primary_key == {"username"}
+    user_password_primary_key = {
+        column[1] for column in database.execute("PRAGMA table_info(user_password)") if column[5]
+    }
+    assert user_password_primary_key == {"user_id"}
 
 
 def test_postgresql_and_sqlite_baselines_declare_the_same_tables():
@@ -56,6 +65,7 @@ def test_postgresql_and_sqlite_baselines_declare_the_same_tables():
         "user_account",
         "user_password",
         "login_failure",
+        "login_failure_by_account",
         "setting",
         "fandom",
         "unit_conversion",
@@ -76,12 +86,15 @@ def test_postgresql_and_sqlite_baselines_declare_the_same_tables():
         path.read_text(encoding="utf-8")
         for path in sorted(Path("migrations/sql/postgresql").glob("V*.sql"))
     ).upper()
-    assert postgresql_sql.count("ID BIGSERIAL PRIMARY KEY") == len(expected) - 1
+    assert postgresql_sql.count("ID BIGSERIAL PRIMARY KEY") == len(expected) - 3
     assert "REGEX BOOLEAN NOT NULL DEFAULT FALSE" in postgresql_sql
-    assert "ENCODED_PASSWORD BYTEA NOT NULL" in postgresql_sql
-    assert "NONCE BYTEA NOT NULL" in postgresql_sql
-    assert "CONSTRAINT UQ_USER_PASSWORD_NONCE UNIQUE (NONCE)" in postgresql_sql
+    assert "PASSWORD_HASH TEXT NOT NULL" in postgresql_sql
+    assert "USER_ID BIGINT PRIMARY KEY REFERENCES USER_ACCOUNT(ID) ON DELETE CASCADE" in postgresql_sql
+    assert "ENCODED_PASSWORD" not in postgresql_sql
+    assert "NONCE" not in postgresql_sql
+    assert "KEY_VERSION" not in postgresql_sql
     assert "PRIMARY KEY (USERNAME, IP)" in postgresql_sql
+    assert "USERNAME TEXT NOT NULL PRIMARY KEY" in postgresql_sql
 
 
 def test_sqlalchemy_model_generation_is_deterministic(tmp_path: Path):
@@ -93,7 +106,7 @@ def test_sqlalchemy_model_generation_is_deterministic(tmp_path: Path):
     outputs = [tmp_path / "models-one.py", tmp_path / "models-two.py"]
     tables = (
         "user_account,user_password,setting,fandom,unit_conversion,"
-        "login_failure,phrase_conversion,image_conversion,image_conversion_file,processing_job"
+        "login_failure,login_failure_by_account,phrase_conversion,image_conversion,image_conversion_file,processing_job"
     )
     sqlacodegen = str(Path(sys.executable).with_name("sqlacodegen"))
     for output in outputs:
@@ -103,6 +116,8 @@ def test_sqlalchemy_model_generation_is_deterministic(tmp_path: Path):
                 f"sqlite:///{database_path}",
                 "--generator",
                 "declarative",
+                "--options",
+                "nojoined",
                 "--tables",
                 tables,
                 "--outfile",

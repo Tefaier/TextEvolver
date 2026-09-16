@@ -37,13 +37,14 @@ from text_evolver.services import (
     validate_credentials,
 )
 from text_evolver.web.auth import (
-    add_encrypted_password,
+    add_password,
     csrf_token,
     current_user,
     flash,
     login,
     logout,
     pop_flashes,
+    rehash_password_if_needed,
     require_user,
     validate_csrf,
     verify_password,
@@ -51,8 +52,10 @@ from text_evolver.web.auth import (
 from text_evolver.web.login_throttle import (
     clear_login_failure,
     client_ip,
+    lock_account_login_failure,
     lock_login_failure,
     login_is_blocked,
+    record_account_login_failure,
     record_login_failure,
 )
 from text_evolver.web.processing_status import ProcessingConnectionLimiter, wait_for_disconnect
@@ -219,7 +222,6 @@ def login_page(request: Request, session: Session = Depends(get_db)) -> Response
 async def login_submit(
     request: Request,
     session: Session = Depends(get_db),
-    app_settings: AppSettings = Depends(get_application_settings),
 ) -> Response:
     await validate_csrf(request)
     form = await request.form()
@@ -228,7 +230,8 @@ async def login_submit(
     ip = client_ip(request.client.host if request.client is not None else None)
     now = dt.datetime.now(dt.UTC)
     login_failure = lock_login_failure(session, username, ip)
-    if login_is_blocked(login_failure, now):
+    account_login_failure = lock_account_login_failure(session, username)
+    if login_is_blocked(login_failure, account_login_failure, now):
         return validation_error_response(
             request,
             "Too many failed login attempts. Try again later",
@@ -241,14 +244,16 @@ async def login_submit(
         if user is None
         else session.scalar(select(UserPassword).where(UserPassword.user_id == user.id))
     )
-    if user is None or stored_password is None or not verify_password(password, stored_password, app_settings):
+    if not verify_password(password, stored_password):
         record_login_failure(session, login_failure, username, ip, now)
+        record_account_login_failure(session, account_login_failure, username, now)
         return validation_error_response(
             request,
             "User with these username and password does not exist",
             "loging.html",
         )
     clear_login_failure(session, username, ip)
+    rehash_password_if_needed(stored_password, password)
     user.last_entry = now
     login(request, user)
     flash(request, f"You successfully logged into account {user.username}", "success")
@@ -266,7 +271,6 @@ def register_page(request: Request, session: Session = Depends(get_db)) -> Respo
 async def register_submit(
     request: Request,
     session: Session = Depends(get_db),
-    app_settings: AppSettings = Depends(get_application_settings),
 ) -> Response:
     await validate_csrf(request)
     form = await request.form()
@@ -280,7 +284,7 @@ async def register_submit(
         user = UserAccount(username=username)
         session.add(user)
         session.flush()
-        add_encrypted_password(session, user.id, password, app_settings)
+        add_password(session, user.id, password)
     except ValidationError as exc:
         return validation_error_response(request, str(exc), "register.html")
     login(request, user)

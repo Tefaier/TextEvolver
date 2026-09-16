@@ -1,7 +1,7 @@
 from typing import Optional
 import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, Enum, Float, ForeignKey, Index, Integer, LargeBinary, TIMESTAMP, Text, UniqueConstraint, text
+from sqlalchemy import Boolean, CheckConstraint, Enum, Float, ForeignKey, Index, Integer, TIMESTAMP, Text, UniqueConstraint, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
@@ -19,6 +19,18 @@ class LoginFailure(Base):
     ip: Mapped[str] = mapped_column(Text, primary_key=True)
     failure_count: Mapped[int] = mapped_column(Integer, nullable=False)
     window_started_at: Mapped[datetime.datetime] = mapped_column(TIMESTAMP, nullable=False)
+
+
+class LoginFailureByAccount(Base):
+    __tablename__ = 'login_failure_by_account'
+    __table_args__ = (
+        CheckConstraint('failure_score >= 1'),
+        Index('ix_login_failure_by_account_last_failure_at', 'last_failure_at')
+    )
+
+    username: Mapped[str] = mapped_column(Text, primary_key=True)
+    failure_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    last_failure_at: Mapped[datetime.datetime] = mapped_column(TIMESTAMP, nullable=False)
 
 
 class UserAccount(Base):
@@ -60,19 +72,9 @@ class Setting(Base):
 
 class UserPassword(Base):
     __tablename__ = 'user_password'
-    __table_args__ = (
-        CheckConstraint('key_version >= 1'),
-        CheckConstraint('length(encoded_password) >= 16'),
-        CheckConstraint('length(nonce) = 12'),
-        UniqueConstraint('nonce', name='uq_user_password_nonce'),
-        Index('ix_user_password_key_version_id', 'key_version', 'id')
-    )
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey('user_account.id'), nullable=False, unique=True)
-    encoded_password: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
-    nonce: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
-    key_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey('user_account.id'), primary_key=True)
+    password_hash: Mapped[str] = mapped_column(Text, nullable=False)
 
     user: Mapped['UserAccount'] = relationship('UserAccount', back_populates='user_password')
 

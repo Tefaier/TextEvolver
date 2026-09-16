@@ -1,5 +1,4 @@
 import datetime as dt
-import secrets
 import time
 
 import pytest
@@ -14,13 +13,14 @@ from text_evolver.db.models import (
     ImageConversion,
     ImageConversionFile,
     LoginFailure,
+    LoginFailureByAccount,
     ProcessingJob,
     Setting,
     UserAccount,
     UserPassword,
 )
 from text_evolver.services import job_paths
-from text_evolver.web.auth import encrypt_password, verify_password
+from text_evolver.web.auth import verify_password
 
 
 def create_processing_job(database, app_settings, *, status: str = "queued"):
@@ -50,7 +50,7 @@ def test_readiness_checks_database_and_object_storage(client, image_storage):
     assert image_storage.availability_checks == 1
 
 
-def test_registration_encrypts_password(client: TestClient, database, app_settings):
+def test_registration_hashes_password(client: TestClient, database):
     token = csrf_from(client.get("/register"))
     response = client.post(
         "/register",
@@ -63,11 +63,10 @@ def test_registration_encrypts_password(client: TestClient, database, app_settin
         assert user is not None
         stored = session.scalar(select(UserPassword).where(UserPassword.user_id == user.id))
         assert stored is not None
-        assert stored.encoded_password != b"not-plaintext"
-        assert len(stored.nonce) == 12
-        assert stored.key_version == app_settings.password_key_current_version
-        assert verify_password("not-plaintext", stored, app_settings)
-        assert not verify_password("wrong-password", stored, app_settings)
+        assert stored.password_hash.startswith("$argon2id$")
+        assert "not-plaintext" not in stored.password_hash
+        assert verify_password("not-plaintext", stored)
+        assert not verify_password("wrong-password", stored)
 
 
 def test_form_validation_error_is_returned_for_popup_without_redirect(client: TestClient):
@@ -97,17 +96,24 @@ def test_login_blocks_after_five_failures_and_shifts_expired_window(client: Test
 
     with Session(database) as session:
         failure = session.scalar(select(LoginFailure).where(LoginFailure.username == "missing-user"))
+        account_failure = session.get(LoginFailureByAccount, "missing-user")
         assert failure is not None
+        assert account_failure is not None
         assert failure.failure_count == 5
+        assert account_failure.failure_score == 5
         failure.window_started_at = dt.datetime.now(dt.UTC) - dt.timedelta(minutes=10, seconds=1)
+        account_failure.last_failure_at = dt.datetime.now(dt.UTC) - dt.timedelta(seconds=2)
         session.commit()
 
     assert client.post("/login", data=login_data).status_code == 422
     assert client.post("/login", data=login_data).status_code == 429
     with Session(database) as session:
         failure = session.scalar(select(LoginFailure).where(LoginFailure.username == "missing-user"))
+        account_failure = session.get(LoginFailureByAccount, "missing-user")
         assert failure is not None
+        assert account_failure is not None
         assert failure.failure_count == 6
+        assert account_failure.failure_score == 6
         assert failure.window_started_at > dt.datetime.now(dt.UTC).replace(tzinfo=None) - dt.timedelta(minutes=1)
 
 
@@ -130,6 +136,7 @@ def test_successful_login_clears_failure_row(registered_client: TestClient, data
 
     with Session(database) as session:
         assert session.scalar(select(LoginFailure).where(LoginFailure.username == "reader")) is None
+        assert session.get(LoginFailureByAccount, "reader") is None
 
 
 def test_registration_requires_a_twelve_character_password(client: TestClient, database):
@@ -168,94 +175,6 @@ def test_json_form_success_preserves_flash_for_redirect_destination(client: Test
     assert 'id="notification-container"' in destination.text
     assert 'class="notification notification-success"' in destination.text
     assert "You successfully registered account popup-user" in destination.text
-
-
-def test_login_accepts_password_encrypted_with_previous_key(client: TestClient, database, app_settings):
-    previous_settings = app_settings.model_copy(
-        update={
-            "password_key_current": app_settings.password_key_previous,
-            "password_key_current_version": app_settings.password_key_previous_version,
-            "password_key_previous": None,
-            "password_key_previous_version": None,
-        }
-    )
-    with Session(database) as session:
-        user = UserAccount(username="rotating-user")
-        session.add(user)
-        session.flush()
-        encrypted = encrypt_password("old-key-password", user.id, previous_settings)
-        stored = UserPassword(
-            user_id=user.id,
-            encoded_password=encrypted.encoded_password,
-            nonce=encrypted.nonce,
-            key_version=encrypted.key_version,
-        )
-        session.add(stored)
-        session.commit()
-        user_id = user.id
-
-    token = csrf_from(client.get("/login"))
-    response = client.post(
-        "/login",
-        data={"csrf_token": token, "username": "rotating-user", "password": "old-key-password"},
-    )
-
-    assert response.status_code == 200
-    assert "Your workspace" in response.text
-    with Session(database) as session:
-        stored = session.scalar(select(UserPassword).where(UserPassword.user_id == user_id))
-        assert stored is not None
-        assert stored.key_version == app_settings.password_key_previous_version
-        assert verify_password("old-key-password", stored, app_settings)
-
-
-def test_registration_retries_when_password_nonce_collides(
-    client: TestClient,
-    database,
-    app_settings,
-    monkeypatch,
-):
-    colliding_nonce = b"\x00" * 12
-    replacement_nonce = b"\x01" * 12
-    with Session(database) as session:
-        existing_user = UserAccount(username="existing-user")
-        session.add(existing_user)
-        session.flush()
-        session.add(
-            UserPassword(
-                user_id=existing_user.id,
-                encoded_password=b"x" * 16,
-                nonce=colliding_nonce,
-                key_version=app_settings.password_key_current_version,
-            )
-        )
-        session.commit()
-
-    token = csrf_from(client.get("/register"))
-    generated_nonces = iter((colliding_nonce, replacement_nonce))
-    original_token_bytes = secrets.token_bytes
-    monkeypatch.setattr(
-        "text_evolver.web.auth.secrets.token_bytes",
-        lambda size: next(generated_nonces) if size == 12 else original_token_bytes(size),
-    )
-    response = client.post(
-        "/register",
-        data={
-            "csrf_token": token,
-            "username": "nonce-retry-user",
-            "password": "encrypted password",
-            "confirm": "encrypted password",
-        },
-    )
-
-    assert response.status_code == 200
-    with Session(database) as session:
-        user = session.scalar(select(UserAccount).where(UserAccount.username == "nonce-retry-user"))
-        assert user is not None
-        stored = session.scalar(select(UserPassword).where(UserPassword.user_id == user.id))
-        assert stored is not None
-        assert stored.nonce == replacement_nonce
-        assert verify_password("encrypted password", stored, app_settings)
 
 
 def test_csrf_is_required_for_mutations(registered_client: TestClient):

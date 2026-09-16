@@ -17,7 +17,8 @@ flyway migrate
 sqlacodegen \
     "sqlite:///${database_path}" \
     --generator declarative \
-    --tables user_account,user_password,login_failure,setting,fandom,unit_conversion,phrase_conversion,image_conversion,image_conversion_file,processing_job \
+    --options nojoined \
+    --tables user_account,user_password,login_failure,login_failure_by_account,setting,fandom,unit_conversion,phrase_conversion,image_conversion,image_conversion_file,processing_job \
     --outfile "${repository_dir}/src/text_evolver/db/models.py"
 
 echo "Generated src/text_evolver/db/models.py from a fresh Flyway SQLite schema."

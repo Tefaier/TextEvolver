@@ -11,6 +11,7 @@ from text_evolver.db.models import (
     ImageConversion,
     ImageConversionFile,
     LoginFailure,
+    LoginFailureByAccount,
     ProcessingJob,
     Setting,
     UserAccount,
@@ -171,15 +172,37 @@ def test_worker_deletes_login_failures_older_than_one_hour(monkeypatch, database
                     failure_count=1,
                     window_started_at=now - dt.timedelta(minutes=59),
                 ),
+                LoginFailureByAccount(
+                    username="expired-account",
+                    failure_score=8,
+                    last_failure_at=now - dt.timedelta(hours=1, seconds=1),
+                ),
+                LoginFailureByAccount(
+                    username="recent-account",
+                    failure_score=5,
+                    last_failure_at=now - dt.timedelta(minutes=59),
+                ),
             ]
         )
         session.commit()
 
     assert worker.LOGIN_FAILURE_CLEANUP_SECONDS == 60
-    assert worker.cleanup_expired_login_failures(now) == 1
+    assert worker.cleanup_expired_login_failures(now) == 2
     with Session(database) as session:
         assert session.scalar(select(LoginFailure).where(LoginFailure.username == "expired-user")) is None
         assert session.scalar(select(LoginFailure).where(LoginFailure.username == "recent-user")) is not None
+        assert (
+            session.scalar(
+                select(LoginFailureByAccount).where(LoginFailureByAccount.username == "expired-account")
+            )
+            is None
+        )
+        assert (
+            session.scalar(
+                select(LoginFailureByAccount).where(LoginFailureByAccount.username == "recent-account")
+            )
+            is not None
+        )
 
 
 def test_queued_cancellation_and_restart_recovery(monkeypatch, database, app_settings):

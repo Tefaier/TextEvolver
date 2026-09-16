@@ -19,7 +19,6 @@ python3.12 -m venv .venv
 ```bash
 ./migrations/apply.sh
 ./migrations/generate_models.sh
-.venv/bin/python migrations/upgrade_cipher_version.py --batch-size 100
 podman build -t text-evolver:local .
 podman compose up --build
 ```
@@ -94,12 +93,11 @@ fields currently accept at most 64 characters.
 ## Configuration and paths
 
 Configuration is defined in `src/text_evolver/config.py` and loaded from
-environment variables. `DATABASE_URL`, `SECRET_KEY`,
-`PASSWORD_KEY_CURRENT`, `PASSWORD_KEY_CURRENT_VERSION`, `S3_ENDPOINT_URL`,
-`S3_BUCKET`, `S3_ACCESS_KEY`, and `S3_SECRET_KEY` are required. Root
-`.env` is for the app/Compose; `migrations/.env` is intentionally separate for
-manual Flyway execution. Both real files are ignored; update their example
-files when variables change.
+environment variables. `DATABASE_URL`, `SECRET_KEY`, `S3_ENDPOINT_URL`,
+`S3_BUCKET`, `S3_ACCESS_KEY`, and `S3_SECRET_KEY` are required. Root `.env` is
+for the app/Compose; `migrations/.env` is intentionally separate for manual
+Flyway execution. Both real files are ignored; update their example files when
+variables change.
 
 Use `pathlib.Path`. Runtime paths must be environment-provided or relative to
 the current project/container working directory. Never add host-specific or
@@ -110,10 +108,8 @@ Windows absolute paths, string-built separators, or CWD temporary files.
 - Keep the server-rendered UI unless a separate API/frontend change is
   explicitly requested.
 - All state-changing forms require the signed-session CSRF token.
-- Passwords are AES-256-GCM encrypted in `user_password` with a unique random
-  nonce and key version. New writes use the current key; reads accept only the
-  current or configured previous key. Never log plaintext credentials,
-  encryption keys, nonces, or ciphertext.
+- Passwords are stored only as Argon2id hashes in `user_password`. Never log
+  plaintext credentials or password hashes.
 - Parse submitted booleans explicitly; never use `eval()`.
 - Validate setting ownership/public access in services or route dependencies.
 - Sanitize upload names with `Path(filename).name` and preserve job isolation.

@@ -8,14 +8,9 @@ CREATE TABLE user_account (
 );
 
 CREATE TABLE user_password (
-    id BIGSERIAL PRIMARY KEY,
-    user_id BIGINT NOT NULL UNIQUE REFERENCES user_account(id) ON DELETE CASCADE,
-    encoded_password BYTEA NOT NULL CHECK (octet_length(encoded_password) >= 16),
-    nonce BYTEA NOT NULL CHECK (octet_length(nonce) = 12),
-    key_version INTEGER NOT NULL CHECK (key_version >= 1),
-    CONSTRAINT uq_user_password_nonce UNIQUE (nonce)
+    user_id BIGINT PRIMARY KEY REFERENCES user_account(id) ON DELETE CASCADE,
+    password_hash TEXT NOT NULL
 );
-CREATE INDEX ix_user_password_key_version_id ON user_password(key_version, id);
 
 CREATE TABLE setting (
     id BIGSERIAL PRIMARY KEY,
