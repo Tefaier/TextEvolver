@@ -1,11 +1,11 @@
 import datetime as dt
 
 from sqlalchemy import case, delete, select
-from sqlalchemy.dialects.postgresql import insert as postgresql_insert
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from text_evolver.db.models import LoginFailure, LoginFailureByAccount
+from text_evolver.web.utils import utc
 
 LOGIN_FAILURE_LIMIT = 5
 LOGIN_FAILURE_WINDOW = dt.timedelta(minutes=10)
@@ -33,16 +33,10 @@ def lock_account_login_failure(session: Session, username: str) -> LoginFailureB
     )
 
 
-def _as_utc(value: dt.datetime) -> dt.datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=dt.UTC)
-    return value.astimezone(dt.UTC)
-
-
 def _pair_login_is_blocked(failure: LoginFailure | None, now: dt.datetime) -> bool:
     if failure is None or failure.failure_count < LOGIN_FAILURE_LIMIT:
         return False
-    return now - _as_utc(failure.window_started_at) < LOGIN_FAILURE_WINDOW
+    return now - utc(failure.window_started_at) < LOGIN_FAILURE_WINDOW
 
 
 def account_retry_delay(failure_score: int) -> dt.timedelta:
@@ -57,11 +51,14 @@ def login_is_blocked(
     account_failure: LoginFailureByAccount | None,
     now: dt.datetime,
 ) -> bool:
-    if _pair_login_is_blocked(pair_failure, now):
+    if (pair_failure is not None and 
+        pair_failure.failure_count >= LOGIN_FAILURE_LIMIT and 
+        now - utc(pair_failure.window_started_at) < LOGIN_FAILURE_WINDOW):
         return True
-    if account_failure is None:
-        return False
-    return now - _as_utc(account_failure.last_failure_at) < account_retry_delay(account_failure.failure_score)
+    if (account_failure is not None and 
+        now - utc(account_failure.last_failure_at) < account_retry_delay(account_failure.failure_score)):
+        return True
+    return False
 
 
 def record_login_failure(
@@ -73,28 +70,20 @@ def record_login_failure(
 ) -> None:
     if failure is None:
         values = {"username": username, "ip": ip, "failure_count": 1, "window_started_at": now}
-        insert = (
-            postgresql_insert(LoginFailure)
-            if session.get_bind().dialect.name == "postgresql"
-            else sqlite_insert(LoginFailure)
-        )
         session.execute(
-            insert.values(**values).on_conflict_do_update(
+            insert(LoginFailure).values(**values).on_conflict_do_update(
                 index_elements=[LoginFailure.username, LoginFailure.ip],
                 set_={
                     "failure_count": LoginFailure.failure_count + 1,
                     "window_started_at": case(
-                        (
-                            LoginFailure.window_started_at <= now - LOGIN_FAILURE_WINDOW,
-                            now,
-                        ),
+                        (LoginFailure.window_started_at <= now - LOGIN_FAILURE_WINDOW, now),
                         else_=LoginFailure.window_started_at,
                     ),
                 },
             )
         )
         return
-    if now - _as_utc(failure.window_started_at) >= LOGIN_FAILURE_WINDOW:
+    if now - utc(failure.window_started_at) >= LOGIN_FAILURE_WINDOW:
         failure.window_started_at = now
     failure.failure_count += 1
 
@@ -107,13 +96,8 @@ def record_account_login_failure(
 ) -> None:
     if failure is None:
         values = {"username": username, "failure_score": 1, "last_failure_at": now}
-        insert = (
-            postgresql_insert(LoginFailureByAccount)
-            if session.get_bind().dialect.name == "postgresql"
-            else sqlite_insert(LoginFailureByAccount)
-        )
         session.execute(
-            insert.values(**values).on_conflict_do_update(
+            insert(LoginFailureByAccount).values(**values).on_conflict_do_update(
                 index_elements=[LoginFailureByAccount.username],
                 set_={
                     "failure_score": LoginFailureByAccount.failure_score + 1,

@@ -8,31 +8,32 @@
             <p class="account-login" title="{{ user.name }}">{{ user.name }}</p>
             <form class="header-search" action="{{ url_for('search_req') }}" method="POST">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <label class="sr-only" for="global-search">Search public settings</label>
-                <input id="global-search" name="search" type="search" placeholder="Search public settings">
-                <button type="submit" aria-label="Search"><i class="fas fa-search" aria-hidden="true"></i></button>
+                <label class="sr-only" for="global-search">{{ translate('Search settings') }}</label>
+                <input id="global-search" name="search" type="search" placeholder="{{ translate('Search settings') }}">
+                <button type="submit" aria-label="{{ translate('Search') }}"><i class="fas fa-search" aria-hidden="true"></i></button>
             </form>
             <div class="header-actions">
+                <a class="header-action" href="{{ url_for('account_settings') }}">{{ translate('Account settings') }}</a>
                 <form action="{{ url_for('download_files') }}" method="POST" data-native-submit>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <button id="processing-files" type="submit" onclick="Files_reset(this)"
                             {{ '' if job_complete and files_situation[1] != 0 else 'disabled' }}
-                            aria-label="Processing files"
+                            aria-label="{{ translate('Processing files') }}"
                             class="header-action processing-status {{ 'proc_process' if job_active else ('proc_finished' if job_complete and files_situation[1] != 0 else 'proc_empty') }}">
                         <i class="far fa-folder-open" aria-hidden="true"></i>
-                        <span data-processing-label>{% if user.waits %}Waits {% endif %}{{ files_situation[1] }} / {{ [files_situation[0], files_situation[1]] | max }}</span>
+                        <span data-processing-label>{% if user.waits %}{{ translate('Waits ') }}{% endif %}{{ files_situation[1] }} / {{ [files_situation[0], files_situation[1]] | max }}</span>
                     </button>
                 </form>
                 <form id="terminate-control" action="{{ url_for('terminate') }}" method="POST"
                       {{ '' if job is not none and job.status == 'running' and not job.cancellation_requested else 'hidden' }}>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button type="submit" class="header-action header-action-danger">Terminate</button>
+                    <button type="submit" class="header-action header-action-danger">{{ translate('Terminate') }}</button>
                 </form>
                 <form action="{{ url_for('logout') }}" method="POST">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <button type="submit" class="header-action">
                         <i class="fas fa-sign-out-alt" aria-hidden="true"></i>
-                        <span>Log out</span>
+                        <span>{{ translate('Log out') }}</span>
                     </button>
                 </form>
             </div>
@@ -47,7 +48,7 @@
 
                 function showSnapshot(snapshot) {
                     const label = filesButton.querySelector("span");
-                    label.textContent = `${snapshot.status === "queued" ? "Waits " : ""}${snapshot.completed_files} / ${snapshot.total_files}`;
+                    label.textContent = `${snapshot.status === "queued" ? window.teTranslate("Waits ") : ""}${snapshot.completed_files} / ${snapshot.total_files}`;
                     filesButton.classList.remove("proc_process", "proc_empty", "proc_finished");
                     processingActive = snapshot.status === "queued" || snapshot.status === "running";
                     if (processingActive) {

@@ -32,6 +32,10 @@ migration, and overwrites `src/text_evolver/db/models.py` using `sqlacodegen`.
 It does not use or modify a developer database. Review and commit the generated
 diff; do not add application behavior to that file.
 
+`generate_models.py` reflects the account primary key and its foreign keys as
+SQLAlchemy `Uuid`. PostgreSQL stores native UUIDs. Both V1 baselines generate UUIDv4 account IDs, and the
+application receives `uuid.UUID` values in either dialect.
+
 `FLYWAY_COMMAND` and `SQLACODEGEN_COMMAND` may point to non-default executable
 names or absolute executable paths.
 

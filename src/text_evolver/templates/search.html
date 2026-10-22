@@ -6,22 +6,22 @@
     <section class="search-page">
         <header class="page-heading search-heading">
             <div>
-                <p class="eyebrow">Public library</p>
-                <h1>Search results</h1>
+                <p class="eyebrow">{{ translate('Settings library') }}</p>
+                <h1>{{ translate('Search results') }}</h1>
                 <p>
-                    {{ results['founded'] }} settings found for “{{ results['phrase'] }}”
-                    {% if results['founded'] %}· showing {{ results['left_border'] }}–{{ results['right_border'] }}{% endif %}
+                    {{ ngettext('%(count)s setting found', '%(count)s settings found', results['founded']) }} {{ translate('for “%(phrase)s”', phrase=results['phrase']) }}
+                    {% if results['founded'] %}· {{ translate('Showing %(start)s–%(end)s', start=results['left_border'], end=results['right_border']) }}{% endif %}
                 </p>
             </div>
             <div class="page-actions">
                 <a href="{{ url_for('my_settings') }}" class="button">
                     <i class="fas fa-arrow-left" aria-hidden="true"></i>
-                    My settings
+                    {{ translate('My settings') }}
                 </a>
                 <button type="button" class="button explanation-button" onclick="Open_exp(this)"
                         aria-haspopup="dialog" aria-controls="Explanation" aria-expanded="false">
                     <i class="far fa-question-circle" aria-hidden="true"></i>
-                    Guide
+                    {{ translate('Guide') }}
                 </button>
             </div>
         </header>
@@ -30,54 +30,54 @@
              aria-labelledby="explanation-title" onclick="Close_exp(event)">
             <div class="explanation-popup">
                 <div class="explanation-header">
-                    <h2 id="explanation-title">Search guide</h2>
-                    <button type="button" class="explanation-close" aria-label="Close explanations" onclick="Close_exp(event)">&times;</button>
+                    <h2 id="explanation-title">{{ translate('Search guide') }}</h2>
+                    <button type="button" class="explanation-close" aria-label="{{ translate('Close explanations') }}" onclick="Close_exp(event)">{{ translate('×') }}</button>
                 </div>
-                <p>Search finds public settings whose names contain your phrase.</p>
-                <p>Each result shows the setting name and owner. Open a result to review it, run it on files, or copy it to your account.</p>
-                <p>Use Previous and Next to move between result pages, or My settings to return to your personal workspace.</p>
+                <p>{{ translate('Search finds public settings and your own settings whose names contain your phrase.') }}</p>
+                <p>{{ translate('Each result shows the setting name and owner. Open a result to review it, run it on files, or copy it to your account.') }}</p>
+                <p>{{ translate('Use Previous and Next to move between result pages, or My settings to return to your personal workspace.') }}</p>
             </div>
         </div>
 
-        <div class="search-results" aria-label="Search results">
+        <div class="search-results" aria-label="{{ translate('Search results') }}">
             {% for setting in results['settings'] %}
             <a href="{{ url_for('setting', setting_id=setting.id) }}" class="search-result">
                 <span class="search-result-number">{{ "%02d"|format(loop.index + results['offset']) }}</span>
                 <span class="search-result-summary">
                     <strong>{{ setting.name }}</strong>
-                    <span>Created by {% if setting.owner_id == user.id %}you{% else %}{{ setting.owner_name }}{% endif %}</span>
+                    <span>{{ translate('Created by you') if setting.owner_id == user.id else translate('Created by %(owner)s', owner=setting.owner_name) }}</span>
                 </span>
-                <span class="search-result-open">Open setting</span>
+                <span class="search-result-open">{{ translate('Open setting') }}</span>
             </a>
             {% else %}
             <div class="empty-state">
-                <h2>No matching settings</h2>
-                <p>Try another phrase or return to your personal settings.</p>
+                <h2>{{ translate('No matching settings') }}</h2>
+                <p>{{ translate('Try another phrase or return to your personal settings.') }}</p>
             </div>
             {% endfor %}
         </div>
 
-        <nav class="search-pagination" aria-label="Search result pages">
+        <nav class="search-pagination" aria-label="{{ translate('Search result pages') }}">
             {% if results['left_available'] %}
-            <a href="{{ url_for('search', phrase=results['phrase'], page=results['page']-1) }}" class="pagination-link">
+            <a href="{{ url_for('search').include_query_params(phrase=results['phrase'], page=results['page']-1) }}" class="pagination-link">
                 <i class="fas fa-arrow-left" aria-hidden="true"></i>
-                Previous
+                {{ translate('Previous') }}
             </a>
             {% else %}
             <span class="pagination-link is-disabled" aria-disabled="true">
                 <i class="fas fa-arrow-left" aria-hidden="true"></i>
-                Previous
+                {{ translate('Previous') }}
             </span>
             {% endif %}
-            <span>Page {{ results['page'] }}</span>
+            <span>{{ translate('Page %(number)s', number=results['page']) }}</span>
             {% if results['right_available'] %}
-            <a href="{{ url_for('search', phrase=results['phrase'], page=results['page']+1) }}" class="pagination-link">
-                Next
+            <a href="{{ url_for('search').include_query_params(phrase=results['phrase'], page=results['page']+1) }}" class="pagination-link">
+                {{ translate('Next') }}
                 <i class="fas fa-arrow-right" aria-hidden="true"></i>
             </a>
             {% else %}
             <span class="pagination-link is-disabled" aria-disabled="true">
-                Next
+                {{ translate('Next') }}
                 <i class="fas fa-arrow-right" aria-hidden="true"></i>
             </span>
             {% endif %}

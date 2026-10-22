@@ -46,7 +46,7 @@ function responseMessage(payload) {
     if (typeof payload.detail === "string") {
         return payload.detail;
     }
-    return "The form could not be submitted. Please try again.";
+    return window.teTranslate("The form could not be submitted. Please try again.");
 }
 
 async function submitFormWithoutReload(event) {
@@ -78,7 +78,10 @@ async function submitFormWithoutReload(event) {
             method: "POST",
             body,
             credentials: "same-origin",
-            headers: {Accept: "application/json"},
+            headers: {
+                Accept: "application/json",
+                'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content,
+            },
         });
         if (response.redirected) {
             window.location.assign(response.url);
@@ -86,6 +89,10 @@ async function submitFormWithoutReload(event) {
         }
         const payload = await responsePayload(response);
         if (!response.ok) {
+            if (payload.redirect && response.status === 428) {
+                window.location.assign(payload.redirect);
+                return;
+            }
             showNotification(responseMessage(payload), payload.category);
             return;
         }
@@ -97,7 +104,7 @@ async function submitFormWithoutReload(event) {
             showNotification(payload.message, payload.category);
         }
     } catch (_error) {
-        showNotification("The form could not be submitted. Check your connection and try again.");
+        showNotification(window.teTranslate("The form could not be submitted. Check your connection and try again."));
     } finally {
         activeFormSubmissions.delete(form);
         if (submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement) {

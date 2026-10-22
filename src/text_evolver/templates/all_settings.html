@@ -4,16 +4,16 @@
     <section class="page workspace-page">
         <header class="page-heading">
             <div>
-                <p class="eyebrow">Your workspace</p>
-                <h1>Settings</h1>
-                <p>Build reusable rules, then run them on your documents.</p>
+                <p class="eyebrow">{{ translate('Your workspace') }}</p>
+                <h1>{{ translate('Settings') }}</h1>
+                <p>{{ translate('Build reusable rules, then run them on your documents.') }}</p>
             </div>
         </header>
 
-        <section class="panel settings-panel" aria-label="Saved settings">
+        <section class="panel settings-panel" aria-label="{{ translate('Saved settings') }}">
             <header class="panel-heading">
-                <h2>Saved settings</h2>
-                <span><span data-settings-count>{{ user.settings|length }}</span> of {{ limit }}</span>
+                <h2>{{ translate('Saved settings') }}</h2>
+                <span><span data-settings-count>{{ user.settings|length }}</span> {{ translate('of') }} {{ limit }}</span>
             </header>
 
             <div class="settings-list">
@@ -23,11 +23,11 @@
                         <span class="setting-number">{{ "%02d"|format(loop.index) }}</span>
                         <span class="setting-summary">
                             <strong class="setting-link">{{ setting.name }}</strong>
-                            <span>{{ "Public" if setting.public else "Private" }}</span>
+                            <span>{{ translate("Public") if setting.public else translate("Private") }}</span>
                         </span>
                     </a>
                     <button class="settings-menu-trigger" type="button"
-                            aria-label="Actions for {{ setting.name }}"
+                            aria-label="{{ translate('Actions for %(name)s', name=setting.name) }}"
                             aria-controls="settings-menu-{{ setting.id }}"
                             aria-expanded="false"
                             onclick="Toggle_settings_menu(this, event)">
@@ -37,26 +37,26 @@
                         <div data-menu-default>
                             <a href="{{ url_for('setting', setting_id=setting.id) }}" class="settings-menu-item">
                                 <i class="fas fa-pen" aria-hidden="true"></i>
-                                Edit setting
+                                {{ translate('Edit setting') }}
                             </a>
                             <button type="button" class="settings-menu-item settings-menu-delete" onclick="Show_confirm(this)">
                                 <i class="far fa-trash-alt" aria-hidden="true"></i>
-                                Delete setting
+                                {{ translate('Delete setting') }}
                             </button>
                         </div>
                         <div class="settings-menu-confirm" data-menu-confirm hidden>
-                            <p>Delete this setting?</p>
+                            <p>{{ translate('Delete this setting?') }}</p>
                             <div>
-                                <button type="button" class="button button-quiet" onclick="Reject_confirm(this)">Cancel</button>
-                                <button type="button" class="button button-danger" name="{{ setting.id }}" onclick="Delete_set(this)">Confirm</button>
+                                <button type="button" class="button button-quiet" onclick="Reject_confirm(this)">{{ translate('Cancel') }}</button>
+                                <button type="button" class="button button-danger" name="{{ setting.id }}" onclick="Delete_set(this)">{{ translate('Confirm') }}</button>
                             </div>
                         </div>
                     </div>
                 </article>
                 {% else %}
                 <div class="empty-state">
-                    <h2>No settings yet</h2>
-                    <p>Create a setting to start building document conversion rules.</p>
+                    <h2>{{ translate('No settings yet') }}</h2>
+                    <p>{{ translate('Create a setting to start building document conversion rules.') }}</p>
                 </div>
                 {% endfor %}
             </div>
@@ -67,7 +67,7 @@
                     <button type="submit" class="button" name="New_setting"
                             {{ 'disabled' if user.settings|length >= limit else '' }}>
                         <i class="fas fa-plus" aria-hidden="true"></i>
-                        Add setting
+                        {{ translate('Add setting') }}
                     </button>
                 </form>
             </footer>

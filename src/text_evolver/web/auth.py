@@ -1,62 +1,44 @@
-import hmac
 import secrets
 
-from argon2 import PasswordHasher, Type
-from argon2.exceptions import InvalidHashError, VerificationError
 from fastapi import HTTPException, Request, status
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from text_evolver.db.models import UserAccount, UserPassword
-
-PASSWORD_HASHER = PasswordHasher(type=Type.ID)
-DUMMY_PASSWORD_HASH = PASSWORD_HASHER.hash(secrets.token_urlsafe(32))
-
-
-def hash_password(password: str) -> str:
-    return PASSWORD_HASHER.hash(password)
+from text_evolver.db.models import BrowserSession, UserAccount
+from text_evolver.web.login_throttle import clear_login_failure, client_ip
+from text_evolver.web.routines.accounts import lock_user
+from text_evolver.web.sessions import FRESHNESS, reset_session, retrieve_current_session, state
+from text_evolver.web.utils import utc, utcnow
 
 
-def add_password(session: Session, user_id: int, password: str) -> UserPassword:
-    stored = UserPassword(user_id=user_id, password_hash=hash_password(password))
-    session.add(stored)
-    session.flush()
-    return stored
-
-
-def verify_password(password: str, stored: UserPassword | None) -> bool:
-    password_hash = stored.password_hash if stored is not None else DUMMY_PASSWORD_HASH
-    try:
-        valid = PASSWORD_HASHER.verify(password_hash, password)
-    except (InvalidHashError, VerificationError):
-        return False
-    return stored is not None and valid
-
-
-def rehash_password_if_needed(stored: UserPassword, password: str) -> None:
-    if PASSWORD_HASHER.check_needs_rehash(stored.password_hash):
-        stored.password_hash = hash_password(password)
-
-
-def login(request: Request, user: UserAccount) -> None:
+def login(request: Request, user: UserAccount, method: str = "password", *, recreate: bool = True) -> None:
+    clear_login_failure(request.scope["db"], user.username, client_ip(request.client.host if request.client else None))
+    reset_session(request, request.scope["db"], user.id, method, recreate=recreate)
     request.session.clear()
-    request.session["user_id"] = user.id
-    csrf_token(request)
+    get_or_create_csrf(request)
+    user.last_entry = utcnow()
 
 
 def logout(request: Request) -> None:
+    item = state(request)
+    if item.token_hash is not None:
+        request.scope["db"].execute(
+            update(BrowserSession).where(BrowserSession.token_hash == item.token_hash).values(revoked_at=utcnow())
+        )
+    item.clear()
     request.session.clear()
 
 
 def current_user(request: Request, session: Session) -> UserAccount | None:
-    user_id = request.session.get("user_id")
-    if not isinstance(user_id, int):
-        return None
-    return session.get(UserAccount, user_id)
+    row = retrieve_current_session(session, state(request))
+    return session.get(UserAccount, row.user_id) if row and row.user_id else None
 
 
 def require_user(request: Request, session: Session) -> UserAccount:
     user = current_user(request, session)
     if user is None:
+        if "application/json" in request.headers.get("accept", ""):
+            raise HTTPException(401, "Your session has expired. Please sign in again.")
         raise HTTPException(
             status_code=status.HTTP_303_SEE_OTHER,
             headers={"Location": str(request.url_for("login_page"))},
@@ -64,30 +46,20 @@ def require_user(request: Request, session: Session) -> UserAccount:
     return user
 
 
-def csrf_token(request: Request) -> str:
+def require_recent(request: Request, db: Session) -> UserAccount:
+    user = require_user(request, db)
+    user = lock_user(db, user.id)
+    row = retrieve_current_session(db, state(request), lock=True)
+    if row is None:
+        raise HTTPException(401, "Your session has expired. Please sign in again.")
+    if row.authenticated_at is None or utcnow() - utc(row.authenticated_at) >= FRESHNESS:
+        raise HTTPException(428, "Please authenticate again to continue.")
+    return user
+
+
+def get_or_create_csrf(request: Request) -> str:
     token = request.session.get("csrf_token")
     if not isinstance(token, str):
         token = secrets.token_urlsafe(32)
         request.session["csrf_token"] = token
     return token
-
-
-async def validate_csrf(request: Request) -> None:
-    expected = request.session.get("csrf_token")
-    supplied = request.headers.get("X-CSRF-Token")
-    if supplied is None:
-        form = await request.form()
-        value = form.get("csrf_token")
-        supplied = value if isinstance(value, str) else None
-    if not isinstance(expected, str) or not isinstance(supplied, str) or not hmac.compare_digest(expected, supplied):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid CSRF token")
-
-
-def flash(request: Request, message: str, category: str = "error") -> None:
-    messages = request.session.setdefault("flash_messages", [])
-    messages.append([category, message])
-    request.session["flash_messages"] = messages[-20:]
-
-
-def pop_flashes(request: Request) -> list[tuple[str, str]]:
-    return [tuple(item) for item in request.session.pop("flash_messages", [])]

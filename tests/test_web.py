@@ -1,6 +1,7 @@
 import datetime as dt
 import time
 
+import httpx
 import pytest
 from bs4 import BeautifulSoup
 from conftest import csrf_from
@@ -20,7 +21,35 @@ from text_evolver.db.models import (
     UserPassword,
 )
 from text_evolver.services import job_paths
-from text_evolver.web.auth import verify_password
+from text_evolver.web.routines.accounts import create_account
+from text_evolver.web.routines.password import verify_password
+
+
+@pytest.mark.parametrize("invalidate", ["expired", "revoked"])
+def test_open_websocket_closes_when_session_invalidated(registered_client, database, app_settings, invalidate):
+    from text_evolver.db.models import BrowserSession
+    from text_evolver.web.sessions import COOKIE
+    from text_evolver.web.utils import digest
+
+    processing_job = create_processing_job(database, app_settings, status="running")
+    job_id = processing_job[0]
+    token = registered_client.cookies.get(COOKIE)
+    with registered_client.websocket_connect("/ws/processing") as socket:
+        assert socket.receive_json()["status"] == "running"
+        with Session(database) as db:
+            row = db.scalar(select(BrowserSession).where(BrowserSession.token_hash == digest(token)))
+            if invalidate == "expired":
+                row.expires_at = dt.datetime.now(dt.UTC) - dt.timedelta(seconds=1)
+            else:
+                row.revoked_at = dt.datetime.now(dt.UTC)
+            db.commit()
+        with pytest.raises(WebSocketDisconnect) as closed:
+            # There can be one status frame already queued before invalidation.
+            while True:
+                socket.receive_json()
+        assert closed.value.code == 1008
+    with Session(database) as db:
+        assert db.get(ProcessingJob, job_id).status == "running"
 
 
 def create_processing_job(database, app_settings, *, status: str = "queued"):
@@ -34,7 +63,9 @@ def create_processing_job(database, app_settings, *, status: str = "queued"):
         session.add(job)
         session.commit()
         job_id = job.id
-    _, origin, output = job_paths(app_settings, job_id)
+    paths = job_paths(app_settings, job_id)
+    origin = paths[1]
+    output = paths[2]
     origin.mkdir(parents=True)
     output.mkdir(parents=True)
     (origin / "first.html").write_text("first", encoding="utf-8")
@@ -114,7 +145,9 @@ def test_login_blocks_after_five_failures_and_shifts_expired_window(client: Test
         assert account_failure is not None
         assert failure.failure_count == 6
         assert account_failure.failure_score == 6
-        assert failure.window_started_at > dt.datetime.now(dt.UTC).replace(tzinfo=None) - dt.timedelta(minutes=1)
+        assert failure.window_started_at.replace(tzinfo=None) > (
+            dt.datetime.now(dt.UTC).replace(tzinfo=None) - dt.timedelta(minutes=1)
+        )
 
 
 def test_successful_login_clears_failure_row(registered_client: TestClient, database):
@@ -213,7 +246,7 @@ def test_search_uses_scrollable_results_and_fixed_pager(registered_client: TestC
         session.add(Setting(owner_id=owner.id, name="Search fixture", public=True))
         session.commit()
 
-    page = registered_client.get("/search/Search/1")
+    page = registered_client.get("/search", params={"phrase": "Search", "page": 1})
 
     assert page.status_code == 200
     assert 'class="search-results"' in page.text
@@ -221,6 +254,63 @@ def test_search_uses_scrollable_results_and_fixed_pager(registered_client: TestC
     assert "My settings" in page.text
     assert "Guide" in page.text
     assert "Refine" not in page.text
+
+
+def test_search_includes_public_and_owned_settings_with_consistent_pagination(
+    registered_client: TestClient, database, app_settings,
+):
+    app_settings.results_per_page = 2
+    with Session(database) as session:
+        owner = session.scalar(select(UserAccount).where(UserAccount.username == "reader"))
+        other = create_account(session, "other-search-owner")
+        session.add_all([
+            Setting(owner_id=owner.id, name="Match A own private", public=False),
+            Setting(owner_id=owner.id, name="Match B own public", public=True),
+            Setting(owner_id=other.id, name="Match C other public", public=True),
+            Setting(owner_id=other.id, name="Match D other private", public=False),
+            Setting(owner_id=owner.id, name="Unrelated own", public=False),
+            Setting(owner_id=other.id, name="Unrelated public", public=True),
+        ])
+        session.commit()
+
+    first = registered_client.get("/search", params={"phrase": "Match", "page": 1})
+    assert first.status_code == 200
+    assert "3 settings found" in first.text
+    assert "Showing 1–2" in first.text
+    first_soup = BeautifulSoup(first.text, "html.parser")
+    assert [item.text for item in first_soup.select(".search-result strong")] == [
+        "Match A own private", "Match B own public",
+    ]
+    next_link = first_soup.select_one("a.pagination-link")
+    assert dict(httpx.URL(next_link["href"]).params) == {"phrase": "Match", "page": "2"}
+
+    second = registered_client.get(next_link["href"])
+    assert second.status_code == 200
+    assert "3 settings found" in second.text
+    assert "Showing 3–3" in second.text
+    second_soup = BeautifulSoup(second.text, "html.parser")
+    assert [item.text for item in second_soup.select(".search-result strong")] == ["Match C other public"]
+    previous_link = second_soup.select_one("a.pagination-link")
+    assert dict(httpx.URL(previous_link["href"]).params) == {"phrase": "Match", "page": "1"}
+
+
+@pytest.mark.parametrize("json_response", [False, True])
+@pytest.mark.parametrize("phrase", ["", "_", "Глава / one & two? #3"])
+def test_search_form_redirects_with_encoded_query_parameters(registered_client: TestClient, json_response, phrase):
+    token = csrf_from(registered_client.get("/my_settings"))
+    response = registered_client.post(
+        "/search_req",
+        data={"csrf_token": token, "search": phrase},
+        headers={"Accept": "application/json" if json_response else "text/html"},
+        follow_redirects=False,
+    )
+    assert response.status_code == (200 if json_response else 303)
+    destination = httpx.URL(response.json()["redirect"] if json_response else response.headers["location"])
+    assert destination.path == "/search"
+    assert dict(destination.params) == {"phrase": phrase, "page": "1"}
+    page = registered_client.get(str(destination))
+    assert page.status_code == 200
+    assert f"for “{phrase}”" in BeautifulSoup(page.text, "html.parser").get_text()
 
 
 def test_public_setting_uses_copy_action_for_non_owner(registered_client: TestClient, database):
@@ -269,12 +359,12 @@ def test_create_setting_and_enqueue_upload(registered_client: TestClient, databa
     assert 'aria-label="Close explanations"' in page.text
     assert 'onclick="Close_exp(event)"' in page.text
     assert (
-        "class=\"button\" type=\"button\" onclick=\"Close_setting('http://testserver/my_settings')\">Close</button>"
+        'class="button" type="button" onclick="Close_setting(\'http://testserver/my_settings\')">Close</button>'
         in page.text
     )
     assert "function Close_setting(fallbackUrl)" in page.text
     assert (
-        f"class=\"button\" type=\"button\" onclick=\"window.location.href='http://testserver/setting/{setting_id}'\">Reset</button>"
+        f'class="button" type="button" onclick="window.location.href=\'http://testserver/setting/{setting_id}\'">Reset</button>'
         in page.text
     )
     token = csrf_from(page)
@@ -323,7 +413,9 @@ def test_processing_websocket_reports_progress_and_closes_on_completion(
     database,
     app_settings,
 ):
-    job_id, output = create_processing_job(database, app_settings)
+    processing_job = create_processing_job(database, app_settings)
+    job_id = processing_job[0]
+    output = processing_job[1]
 
     with registered_client.websocket_connect("/ws/processing") as websocket:
         assert websocket.receive_json() == {
@@ -459,7 +551,8 @@ def test_deleting_setting_deletes_all_non_running_jobs(
         setting_id = setting.id
         job_ids = [job.id for job in jobs]
     for job_id in job_ids:
-        root, _, _ = job_paths(app_settings, job_id)
+        paths = job_paths(app_settings, job_id)
+        root = paths[0]
         root.mkdir(parents=True)
         (root / "file.txt").write_text("job data", encoding="utf-8")
     token = csrf_from(registered_client.get("/my_settings"))
@@ -474,7 +567,8 @@ def test_deleting_setting_deletes_all_non_running_jobs(
         assert session.get(Setting, setting_id) is None
         assert list(session.scalars(select(ProcessingJob).where(ProcessingJob.id.in_(job_ids)))) == []
     for job_id in job_ids:
-        root, _, _ = job_paths(app_settings, job_id)
+        paths = job_paths(app_settings, job_id)
+        root = paths[0]
         assert not root.exists()
 
 

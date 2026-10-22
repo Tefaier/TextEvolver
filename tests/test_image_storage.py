@@ -1,5 +1,6 @@
 from io import BytesIO
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from botocore.exceptions import ClientError
@@ -89,13 +90,14 @@ def test_storage_changes_delete_only_the_correct_side_of_transaction():
 
 
 def test_object_keys_are_scoped_unique_and_keep_safe_suffixes():
-    first = ImageStorage.object_key(7, 11, "photo.PNG")
-    second = ImageStorage.object_key(7, 11, "photo.PNG")
+    user_id = uuid4()
+    first = ImageStorage.object_key(user_id, 11, "photo.PNG")
+    second = ImageStorage.object_key(user_id, 11, "photo.PNG")
 
-    assert first.startswith("users/7/settings/11/")
+    assert first.startswith(f"users/{user_id}/settings/11/")
     assert first.endswith(".png")
     assert first != second
-    assert ImageStorage.object_key(7, 11, "unsafe.very-long-extension").count(".") == 0
+    assert ImageStorage.object_key(user_id, 11, "unsafe.very-long-extension").count(".") == 0
 
 
 @pytest.mark.parametrize("endpoint", ["minio:9000", "ftp://minio", "http://", "http:///missing-host"])

@@ -11,10 +11,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import psutil
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, or_, select, update
 
 from text_evolver.config import AppSettings, get_application_settings
-from text_evolver.db.models import LoginFailure, LoginFailureByAccount, ProcessingJob
+from text_evolver.db.models import AuthFlow, BrowserSession, LoginFailure, LoginFailureByAccount, ProcessingJob
 from text_evolver.db.session import session_scope
 from text_evolver.image_storage import ImageStorage, get_image_storage
 from text_evolver.processing.pokemon_cache import refresh_pokemon_cache
@@ -26,6 +26,7 @@ LOGGER = logging.getLogger("text_evolver.worker")
 PROCESS_CONTEXT = multiprocessing.get_context("spawn")
 LOGIN_FAILURE_RETENTION = dt.timedelta(hours=1)
 LOGIN_FAILURE_CLEANUP_SECONDS = 60
+SESSION_CLEANUP_SECONDS = 60
 
 
 @dataclass(frozen=True)
@@ -74,6 +75,28 @@ def run_login_failure_cleanup(stopping: threading.Event) -> None:
             if deleted:
                 LOGGER.info("Deleted %s expired login failure record(s)", deleted)
         stopping.wait(LOGIN_FAILURE_CLEANUP_SECONDS)
+
+
+def cleanup_expired_sessions(now: dt.datetime | None = None) -> None:
+    now = now or utcnow()
+    with session_scope() as session:
+        stale = (
+            select(BrowserSession.token_hash)
+            .where(or_(BrowserSession.expires_at <= now, BrowserSession.revoked_at.is_not(None)))
+            .limit(1000)
+        )
+        session.execute(delete(BrowserSession).where(BrowserSession.token_hash.in_(stale)))
+        flows = select(AuthFlow.id).where(AuthFlow.expires_at <= now).limit(1000)
+        session.execute(delete(AuthFlow).where(AuthFlow.id.in_(flows)))
+
+
+def run_session_cleanup(stopping: threading.Event) -> None:
+    while not stopping.is_set():
+        try:
+            cleanup_expired_sessions()
+        except Exception:
+            LOGGER.exception("Could not clean expired or revoked sessions and expired authentication flows")
+        stopping.wait(SESSION_CLEANUP_SECONDS)
 
 
 def claim_job() -> ClaimedJob | None:
@@ -219,15 +242,16 @@ def run_worker_slot(slot: int, settings: AppSettings, stopping: threading.Event)
 
 def run_worker_pool(settings: AppSettings, stopping: threading.Event) -> None:
     with ThreadPoolExecutor(
-        max_workers=settings.worker_concurrency + 1,
+        max_workers=settings.worker_concurrency + 2,
         thread_name_prefix="text-evolver-worker",
     ) as executor:
         slot_futures = [
             executor.submit(run_worker_slot, slot, settings, stopping)
             for slot in range(1, settings.worker_concurrency + 1)
         ]
-        cleanup_future = executor.submit(run_login_failure_cleanup, stopping)
-        futures = [*slot_futures, cleanup_future]
+        login_cleanup_future = executor.submit(run_login_failure_cleanup, stopping)
+        session_cleanup_future = executor.submit(run_session_cleanup, stopping)
+        futures = [*slot_futures, login_cleanup_future, session_cleanup_future]
         try:
             while not stopping.wait(1):
                 for future in futures:

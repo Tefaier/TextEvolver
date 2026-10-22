@@ -1259,3 +1259,16 @@ select {
         transition-duration: 0.01ms;
     }
 }
+
+.localized-logo { width: min(90%, 390px); text-align: center; }
+.logo-wordmark { display: block; color: #00abab; font-family: Arial, sans-serif; font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 700; letter-spacing: .12em; line-height: 1.3; overflow-wrap: anywhere; }
+.logo-symbol { overflow: hidden; position: relative; aspect-ratio: 512 / 340; }
+.logo-symbol img { position: absolute; width: 100%; max-width: none; left: 0; top: -50.6%; }
+.account-panel { padding: 1.5rem; margin-block: 1rem; }
+.account-panel form, .account-dialog form { display: grid; gap: .6rem; max-width: 34rem; margin-block: 1rem; }
+.account-panel input, .account-panel select, .account-dialog input { width: 100%; padding: .6rem; border: 1px solid var(--color-border); border-radius: .4rem; }
+.account-panel .button, .account-dialog .button { margin-block: .4rem; }
+.account-dialog { max-width: 38rem; margin: 3rem auto; padding: 2rem; }
+.passkey-row { border-bottom: 1px solid var(--color-border); padding-block: 1rem; }
+.auth-methods { display: grid; gap: .75rem; margin-block: 1rem; }
+@media (max-width: 600px) { .account-dialog { margin: 1rem; padding: 1rem; } .account-panel { padding: 1rem; } }

@@ -3,13 +3,17 @@ import re
 from collections.abc import Generator
 from itertools import count
 from pathlib import Path
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 
-os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///var/test-bootstrap.db")
+os.environ.setdefault(
+    "DATABASE_URL",
+    os.environ.get("TEXT_EVOLVER_TEST_POSTGRES_URL", "postgresql+psycopg://localhost/text_evolver_test"),
+)
 os.environ.setdefault("SECRET_KEY", "test-secret-key-with-at-least-thirty-two-characters")
 os.environ.setdefault("S3_ENDPOINT_URL", "http://localhost:9000")
 os.environ.setdefault("S3_BUCKET", "test-images")
@@ -18,27 +22,33 @@ os.environ.setdefault("S3_ACCESS_KEY", "test-access-key")
 os.environ.setdefault("S3_SECRET_KEY", "test-secret-key")
 
 from text_evolver.config import AppSettings, get_application_settings  # noqa: E402
-from text_evolver.db.session import get_db  # noqa: E402
 from text_evolver.image_storage import get_image_storage  # noqa: E402
 from text_evolver.main import create_app  # noqa: E402
 
 
 @pytest.fixture
-def database(tmp_path: Path):
-    database_path = tmp_path / "test.db"
-    connection = __import__("sqlite3").connect(database_path)
-    for migration_path in sorted(Path("migrations/sql/sqlite").glob("V*.sql")):
-        connection.executescript(migration_path.read_text(encoding="utf-8"))
-    connection.close()
-    engine = create_engine(f"sqlite+pysqlite:///{database_path}", connect_args={"check_same_thread": False})
+def database():
+    postgres_url = os.environ.get("TEXT_EVOLVER_TEST_POSTGRES_URL")
+    if not postgres_url:
+        pytest.skip("Set TEXT_EVOLVER_TEST_POSTGRES_URL to run database-backed application tests")
+    engine = create_engine(postgres_url, connect_args={"prepare_threshold": None})
+    schema = "auth_test_" + uuid4().hex
+    with engine.begin() as connection:
+        connection.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
+        connection.exec_driver_sql(f'SET search_path TO "{schema}", public')
+        connection.exec_driver_sql(Path("migrations/sql/postgresql/V1__initial_schema.sql").read_text())
 
-    @event.listens_for(engine, "connect")
-    def enable_sqlite_foreign_keys(dbapi_connection, _connection_record):
-        dbapi_connection.execute("PRAGMA foreign_keys = ON")
+    @event.listens_for(engine, "checkout")
+    def select_schema(dbapi_connection, *_):
+        with dbapi_connection.cursor() as cursor:
+            cursor.execute(f'SET search_path TO "{schema}", public')
+        dbapi_connection.commit()
 
     try:
         yield engine
     finally:
+        with engine.begin() as connection:
+            connection.exec_driver_sql(f'DROP SCHEMA "{schema}" CASCADE')
         engine.dispose()
 
 
@@ -64,7 +74,7 @@ class FakeImageStorage:
         self.availability_checks = 0
         self._ids = count(1)
 
-    def object_key(self, user_id: int, setting_id: int, filename: str | None = None) -> str:
+    def object_key(self, user_id: UUID, setting_id: int, filename: str | None = None) -> str:
         suffix = Path(filename or "").suffix
         return f"users/{user_id}/settings/{setting_id}/image-{next(self._ids)}{suffix}"
 
@@ -95,18 +105,8 @@ def image_storage() -> FakeImageStorage:
 
 @pytest.fixture
 def client(database, app_settings: AppSettings, image_storage: FakeImageStorage) -> Generator[TestClient, None, None]:
-    application = create_app()
-
-    def database_override():
-        with Session(database) as session:
-            try:
-                yield session
-                session.commit()
-            except Exception:
-                session.rollback()
-                raise
-
-    application.dependency_overrides[get_db] = database_override
+    application = create_app(app_settings)
+    application.state.session_factory = lambda: Session(database)
     application.dependency_overrides[get_application_settings] = lambda: app_settings
     application.dependency_overrides[get_image_storage] = lambda: image_storage
     with TestClient(application) as test_client:
@@ -115,6 +115,8 @@ def client(database, app_settings: AppSettings, image_storage: FakeImageStorage)
 
 def csrf_from(response) -> str:
     match = re.search(r'name="csrf_token" value="([^"]+)"', response.text)
+    if match is None:
+        match = re.search(r'name="csrf-token" content="([^"]+)"', response.text)
     assert match is not None
     return match.group(1)
 

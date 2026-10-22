@@ -43,7 +43,10 @@ def run_one(tmp_path: Path, filename: str) -> tuple[Path, Path, Path]:
 
 
 def test_html_processing(tmp_path: Path):
-    origin, output, source = run_one(tmp_path, "book.html")
+    paths = run_one(tmp_path, "book.html")
+    origin = paths[0]
+    output = paths[1]
+    source = paths[2]
     source.write_text("<html><body><p>An <strong>old</strong> road.</p></body></html>", encoding="utf-8")
 
     assert process_files(configuration(), origin, output) == 1
@@ -55,7 +58,10 @@ def test_html_processing(tmp_path: Path):
 
 
 def test_fb2_processing(tmp_path: Path):
-    origin, output, source = run_one(tmp_path, "book.fb2")
+    paths = run_one(tmp_path, "book.fb2")
+    origin = paths[0]
+    output = paths[1]
+    source = paths[2]
     source.write_text(
         "<FictionBook><body><section><p>An <emphasis>old</emphasis> road.</p></section></body></FictionBook>",
         encoding="utf-8",
@@ -70,7 +76,10 @@ def test_fb2_processing(tmp_path: Path):
 
 
 def test_docx_processing(tmp_path: Path):
-    origin, output, source = run_one(tmp_path, "book.docx")
+    paths = run_one(tmp_path, "book.docx")
+    origin = paths[0]
+    output = paths[1]
+    source = paths[2]
     document = Document()
     paragraph = document.add_paragraph()
     paragraph.add_run("An ")
@@ -88,7 +97,10 @@ def test_docx_processing(tmp_path: Path):
 
 
 def test_docx_replacement_crosses_runs(tmp_path: Path):
-    origin, output, source = run_one(tmp_path, "split.docx")
+    paths = run_one(tmp_path, "split.docx")
+    origin = paths[0]
+    output = paths[1]
+    source = paths[2]
     document = Document()
     paragraph = document.add_paragraph()
     first_run = paragraph.add_run("old")
@@ -115,7 +127,10 @@ def test_docx_replacement_crosses_runs(tmp_path: Path):
 
 
 def test_epub_processing(tmp_path: Path):
-    origin, output, source = run_one(tmp_path, "book.epub")
+    paths = run_one(tmp_path, "book.epub")
+    origin = paths[0]
+    output = paths[1]
+    source = paths[2]
     book = epub.EpubBook()
     book.set_identifier("fixture")
     book.set_title("Fixture")
@@ -150,7 +165,10 @@ def test_epub_processing(tmp_path: Path):
 
 
 def test_direct_replacement_crosses_markup_parts(tmp_path: Path):
-    origin, output, source = run_one(tmp_path, "split.html")
+    paths = run_one(tmp_path, "split.html")
+    origin = paths[0]
+    output = paths[1]
+    source = paths[2]
     source.write_text("<html><body><p><strong>old</strong> road</p></body></html>", encoding="utf-8")
     split_phrase_configuration = configuration(
         phrases=(
@@ -171,7 +189,10 @@ def test_direct_replacement_crosses_markup_parts(tmp_path: Path):
 
 
 def test_direct_phrase_uses_regex_only_when_enabled(tmp_path: Path):
-    origin, output, source = run_one(tmp_path, "regex.html")
+    paths = run_one(tmp_path, "regex.html")
+    origin = paths[0]
+    output = paths[1]
+    source = paths[2]
     source.write_text("<html><body><p>Item 123 and a+b and aaab.</p></body></html>", encoding="utf-8")
     regex_configuration = configuration(
         phrases=(
@@ -200,7 +221,10 @@ def test_direct_phrase_uses_regex_only_when_enabled(tmp_path: Path):
 
 
 def test_non_direct_phrase_ignores_regex_flag(tmp_path: Path):
-    origin, output, source = run_one(tmp_path, "word-regex.html")
+    paths = run_one(tmp_path, "word-regex.html")
+    origin = paths[0]
+    output = paths[1]
+    source = paths[2]
     source.write_text("<html><body><p>A colour and color.</p></body></html>", encoding="utf-8")
     regex_configuration = configuration(
         phrases=(
@@ -224,7 +248,10 @@ def test_non_direct_phrase_ignores_regex_flag(tmp_path: Path):
 
 
 def test_non_direct_replacement_updates_whole_phrase(tmp_path: Path):
-    origin, output, source = run_one(tmp_path, "phrase.html")
+    paths = run_one(tmp_path, "phrase.html")
+    origin = paths[0]
+    output = paths[1]
+    source = paths[2]
     source.write_text("<html><body><p>An old-road.</p></body></html>", encoding="utf-8")
     phrase_configuration = configuration(
         phrases=(
@@ -344,7 +371,10 @@ def test_configured_feet_rule_converts_standalone_values_using_its_own_settings(
 
 
 def test_docx_table_paragraph_processing(tmp_path: Path):
-    origin, output, source = run_one(tmp_path, "table.docx")
+    paths = run_one(tmp_path, "table.docx")
+    origin = paths[0]
+    output = paths[1]
+    source = paths[2]
     document = Document()
     table = document.add_table(rows=1, cols=1)
     table.cell(0, 0).paragraphs[0].add_run("An old road.")
@@ -357,7 +387,10 @@ def test_docx_table_paragraph_processing(tmp_path: Path):
 
 
 def test_clean_empty_removes_whole_markup_block(tmp_path: Path):
-    origin, output, source = run_one(tmp_path, "clean.html")
+    paths = run_one(tmp_path, "clean.html")
+    origin = paths[0]
+    output = paths[1]
+    source = paths[2]
     source.write_text("<html><body><p><strong>---</strong></p><p>keep</p></body></html>", encoding="utf-8")
 
     process_files(configuration(clean_empty=True, phrases=()), origin, output)
@@ -366,7 +399,10 @@ def test_clean_empty_removes_whole_markup_block(tmp_path: Path):
 
 
 def test_clean_empty_removes_block_that_becomes_empty_after_replacement(tmp_path: Path):
-    origin, output, source = run_one(tmp_path, "clean-after-replacement.html")
+    paths = run_one(tmp_path, "clean-after-replacement.html")
+    origin = paths[0]
+    output = paths[1]
+    source = paths[2]
     source.write_text("<html><body><p>remove 123</p><p>keep</p></body></html>", encoding="utf-8")
     remove_configuration = configuration(
         clean_empty=True,
@@ -387,7 +423,10 @@ def test_clean_empty_removes_block_that_becomes_empty_after_replacement(tmp_path
 
 
 def test_block_level_checks_run_once_for_multiple_native_parts(monkeypatch, tmp_path: Path):
-    origin, output, source = run_one(tmp_path, "parts.html")
+    paths = run_one(tmp_path, "parts.html")
+    origin = paths[0]
+    output = paths[1]
+    source = paths[2]
     source.write_text("<html><body><p>one <strong>two</strong> three</p></body></html>", encoding="utf-8")
     calls: list[str] = []
     original = processor.ProcessUnit.images_locate
@@ -404,7 +443,9 @@ def test_block_level_checks_run_once_for_multiple_native_parts(monkeypatch, tmp_
 
 
 def test_word_counter_ignores_empty_space_segments(tmp_path: Path):
-    origin, output, source = run_one(tmp_path, "spaces.html")
+    paths = run_one(tmp_path, "spaces.html")
+    output = paths[1]
+    source = paths[2]
     source.write_text("<html><body><p>one  two</p><p>   </p></body></html>", encoding="utf-8")
     process_unit = processor.ProcessUnit(configuration(phrases=()))
     document = create_document_adapter(source, output / source.name)

@@ -2,31 +2,37 @@
 
 {% block context %}
     <main class="auth-page">
-        <section class="auth-visual" aria-label="About Text Evolver">
+        <section class="auth-visual" aria-label="{{ translate('About Text Evolver') }}">
             <div class="auth-visual-content">
                 <div class="auth-image-wrap">
-                    <img src="{{ url_for('static', path='register.png') }}" class="auth-image" alt="Text Evolver">
+                    <div class="localized-logo" role="img" aria-label="{{ translate('TEXT EVOLVER') }}">
+                        <span class="logo-wordmark">{{ translate('TEXT EVOLVER') }}</span>
+                        <div class="logo-symbol logo-symbol-register">
+                            <img src="{{ url_for('static', path='register.png') }}" alt="">
+                        </div>
+                    </div>
                 </div>
                 <div class="auth-description">
-                    <h1>What Text Evolver does</h1>
-                    <p>Create reusable conversion rules for DOCX, EPUB, HTML, and FB2 documents, process files in an isolated workspace, and download the finished result as a ZIP.</p>
+                    <h1>{{ translate('What Text Evolver does') }}</h1>
+                    <p>{{ translate('Create reusable conversion rules for DOCX, EPUB, HTML, and FB2 documents, process files in an isolated workspace, and download the finished result as a ZIP.') }}</p>
                 </div>
             </div>
         </section>
         <section class="auth-form-panel">
             <form class="auth-form" action="{{ url_for('register') }}" method="post">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <h2>Create your account</h2>
-                <p class="auth-form-description">Save reusable settings and process documents in your workspace.</p>
-                <label for="username">Username</label>
+                <h2>{{ translate('Create your account') }}</h2>
+                <p class="auth-form-description">{{ translate('Save reusable settings and process documents in your workspace.') }}</p>
+                <label for="username">{{ translate('Username') }}</label>
                 <input id="username" name="username" autocomplete="username" required minlength="4" maxlength="62">
-                <label for="password">Password</label>
+                <label for="password">{{ translate('Password') }}</label>
                 <input id="password" name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="128">
-                <label for="confirm">Repeat password</label>
+                <label for="confirm">{{ translate('Repeat password') }}</label>
                 <input id="confirm" name="confirm" type="password" autocomplete="new-password" required minlength="12" maxlength="128">
-                <button class="button button-primary button-block" type="submit" name="reg">Register</button>
+                <button class="button button-primary button-block" type="submit" name="reg">{{ translate('Register') }}</button>
             </form>
-            <p class="auth-alternative">Already registered? <a href="{{ url_for('login_page') }}">Sign in instead</a></p>
+            {% include "auth_methods.html" %}
+            <p class="auth-alternative">{{ translate('Already registered?') }} <a href="{{ url_for('login_page') }}">{{ translate('Sign in instead') }}</a></p>
         </section>
     </main>
 {% endblock %}

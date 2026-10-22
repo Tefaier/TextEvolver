@@ -1,0 +1,1251 @@
+# Russian translations for TextEvolver.
+# Copyright (C) 2026 ORGANIZATION
+# This file is distributed under the same license as the TextEvolver project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: TextEvolver 1.0\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2026-10-09 22:57+0300\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: ru\n"
+"Language-Team: ru <LL@li.org>\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) "
+"? 1 : 2);\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: src/text_evolver/services.py:83
+#, python-format
+msgid "Invalid boolean value for %(value0)s"
+msgstr "Недопустимое логическое значение: %(value0)s"
+
+#: src/text_evolver/services.py:91
+#, python-format
+msgid "%(value0)s must not be empty"
+msgstr "Поле %(value0)s не должно быть пустым"
+
+#: src/text_evolver/services.py:95
+#, python-format
+msgid "%(value0)s must contain at most %(value1)s characters"
+msgstr "Поле %(value0)s должно содержать не более %(value1)s символов"
+
+#: src/text_evolver/services.py:105 src/text_evolver/web/routers/accounts.py:89 src/text_evolver/web/routers/google.py:184
+msgid "Username must contain between 4 and 62 characters"
+msgstr "Имя пользователя должно содержать от 4 до 62 символов"
+
+#: src/text_evolver/services.py:109
+#, python-format
+msgid "Password must contain between %(value0)s and %(value1)s characters"
+msgstr "Пароль должен содержать от %(value0)s до %(value1)s символов"
+
+#: src/text_evolver/services.py:115
+msgid "Password confirmation does not match"
+msgstr "Пароли не совпадают"
+
+#: src/text_evolver/services.py:194 src/text_evolver/services.py:476 src/text_evolver/services.py:675
+#: src/text_evolver/web/routers/routes.py:370 src/text_evolver/web/routers/routes.py:431 src/text_evolver/web/routers/routes.py:456
+msgid "Setting not found"
+msgstr "Настройка не найдена"
+
+#: src/text_evolver/services.py:260
+msgid "Unable to copy setting images"
+msgstr "Не удалось скопировать изображения настройки"
+
+#: src/text_evolver/services.py:304
+#, python-format
+msgid "Mismatched repeated fields: %(value0)s"
+msgstr "Не совпадает количество повторяющихся полей: %(value0)s"
+
+#: src/text_evolver/services.py:355
+#, python-format
+msgid "Cannot determine the size of uploaded image '%(value0)s'"
+msgstr "Не удалось определить размер изображения «%(value0)s»"
+
+#: src/text_evolver/services.py:357
+#, python-format
+msgid "Uploaded image '%(value0)s' is empty"
+msgstr "Изображение «%(value0)s» пустое"
+
+#: src/text_evolver/services.py:368
+msgid "Image trigger phrase"
+msgstr "Фраза для вставки изображения"
+
+#: src/text_evolver/services.py:373
+msgid "Image conversion row identifier is invalid"
+msgstr "Недопустимый идентификатор вставки изображения"
+
+#: src/text_evolver/services.py:382
+#, python-format
+msgid "Image conversion '%(value0)s' requires an image"
+msgstr "Для вставки «%(value0)s» требуется изображение"
+
+#: src/text_evolver/services.py:387
+msgid "Image explanation"
+msgstr "Подпись изображения"
+
+#: src/text_evolver/services.py:407
+msgid "An image conversion has no stored images"
+msgstr "Для вставки не сохранены изображения"
+
+#: src/text_evolver/services.py:415
+msgid "Images exceed the configured setting size limit"
+msgstr "Изображения превышают допустимый размер настройки"
+
+#: src/text_evolver/services.py:454
+msgid "Unable to store setting images"
+msgstr "Не удалось сохранить изображения настройки"
+
+#: src/text_evolver/services.py:486
+msgid "Cannot update a setting while its job is queued or running"
+msgstr "Нельзя менять настройку, пока её задание ожидает запуска или выполняется"
+
+#: src/text_evolver/services.py:487
+msgid "Setting name"
+msgstr "Название настройки"
+
+#: src/text_evolver/services.py:522
+msgid "Fandom name"
+msgstr "Название фандома"
+
+#: src/text_evolver/services.py:533
+msgid "Unit source phrase"
+msgstr "Исходная единица"
+
+#: src/text_evolver/services.py:538
+msgid "Unit replacement phrase"
+msgstr "Новая единица"
+
+#: src/text_evolver/services.py:549
+msgid "Phrase source"
+msgstr "Исходная фраза"
+
+#: src/text_evolver/services.py:553 src/text_evolver/templates/setting.html:510
+msgid "Phrase replacement"
+msgstr "Замена фразы"
+
+#: src/text_evolver/services.py:559
+#, python-format
+msgid "Invalid phrase regular expression: %(value0)s"
+msgstr "Недопустимое регулярное выражение: %(value0)s"
+
+#: src/text_evolver/services.py:672
+msgid "Setting is currently being updated"
+msgstr "Настройка сейчас обновляется"
+
+#: src/text_evolver/services.py:727
+msgid "There are still files being processed"
+msgstr "Обработка файлов ещё не завершена"
+
+#: src/text_evolver/services.py:729
+msgid "Download completed files before starting another job"
+msgstr "Скачайте готовые файлы перед запуском нового задания"
+
+#: src/text_evolver/services.py:736
+msgid "Select at least one supported document"
+msgstr "Выберите хотя бы один документ поддерживаемого формата"
+
+#: src/text_evolver/services.py:749
+msgid "Uploaded filenames must be unique"
+msgstr "Имена загружаемых файлов должны быть уникальными"
+
+#: src/text_evolver/services.py:756
+msgid "Uploaded files exceed the configured size limit"
+msgstr "Загружаемые файлы превышают допустимый размер"
+
+#: src/text_evolver/templates/account.html:4 src/text_evolver/templates/logged_basis.html:16
+msgid "Account settings"
+msgstr "Настройки аккаунта"
+
+#: src/text_evolver/templates/account.html:6
+msgid "Login name"
+msgstr "Имя для входа"
+
+#: src/text_evolver/templates/account.html:10 src/text_evolver/templates/loging.html:26
+#: src/text_evolver/templates/register.html:26
+msgid "Username"
+msgstr "Имя пользователя"
+
+#: src/text_evolver/templates/account.html:12
+msgid "Save login name"
+msgstr "Сохранить имя"
+
+#: src/text_evolver/templates/account.html:16 src/text_evolver/templates/loging.html:28
+#: src/text_evolver/templates/reauthenticate.html:9 src/text_evolver/templates/register.html:28
+msgid "Password"
+msgstr "Пароль"
+
+#: src/text_evolver/templates/account.html:21
+msgid "Current password"
+msgstr "Текущий пароль"
+
+#: src/text_evolver/templates/account.html:23 src/text_evolver/web/routers/accounts.py:101
+msgid "Authenticate with Google or a passkey to set your first password."
+msgstr "Подтвердите вход через Google или ключ доступа, чтобы создать первый пароль."
+
+#: src/text_evolver/templates/account.html:24 src/text_evolver/templates/reset_password.html:7
+msgid "New password"
+msgstr "Новый пароль"
+
+#: src/text_evolver/templates/account.html:26 src/text_evolver/templates/register.html:30
+#: src/text_evolver/templates/reset_password.html:9
+msgid "Repeat password"
+msgstr "Повторите пароль"
+
+#: src/text_evolver/templates/account.html:28
+msgid "Change password"
+msgstr "Изменить пароль"
+
+#: src/text_evolver/templates/account.html:28
+msgid "Set password"
+msgstr "Создать пароль"
+
+#: src/text_evolver/templates/account.html:32
+msgid "Language"
+msgstr "Язык"
+
+#: src/text_evolver/templates/account.html:36
+msgid "Interface language"
+msgstr "Язык интерфейса"
+
+#: src/text_evolver/templates/account.html:38
+msgid "Default (browser language)"
+msgstr "По умолчанию (язык браузера)"
+
+#: src/text_evolver/templates/account.html:42
+msgid "Save language"
+msgstr "Сохранить язык"
+
+#: src/text_evolver/templates/account.html:46
+msgid "Google sign-in"
+msgstr "Вход через Google"
+
+#: src/text_evolver/templates/account.html:48
+msgid "Google account connected"
+msgstr "Аккаунт Google привязан"
+
+#: src/text_evolver/templates/account.html:51 src/text_evolver/templates/reauthenticate.html:18
+msgid "Authenticate with Google"
+msgstr "Подтвердить вход через Google"
+
+#: src/text_evolver/templates/account.html:55
+msgid "Disconnect Google"
+msgstr "Отвязать Google"
+
+#: src/text_evolver/templates/account.html:60
+msgid "Connect Google"
+msgstr "Привязать Google"
+
+#: src/text_evolver/templates/account.html:62 src/text_evolver/web/routers/google.py:35
+msgid "Google sign-in is not configured."
+msgstr "Вход через Google не настроен."
+
+#: src/text_evolver/templates/account.html:65
+msgid "WebAuthn passkeys"
+msgstr "Ключи доступа WebAuthn"
+
+#: src/text_evolver/templates/account.html:66
+msgid "Passkeys enable alternative sign-in and forgotten-password recovery."
+msgstr "Ключи доступа позволяют входить без пароля и восстанавливать забытый пароль."
+
+#: src/text_evolver/templates/account.html:67
+#, python-format
+msgid "%(count)s passkey enrolled"
+msgid_plural "%(count)s passkeys enrolled"
+msgstr[0] "Добавлен %(count)s ключ доступа"
+msgstr[1] "Добавлено %(count)s ключа доступа"
+msgstr[2] "Добавлено %(count)s ключей доступа"
+
+#: src/text_evolver/templates/account.html:70
+msgid "Last used"
+msgstr "Последнее использование"
+
+#: src/text_evolver/templates/account.html:70
+msgid "Never"
+msgstr "Ещё не использовался"
+
+#: src/text_evolver/templates/account.html:73
+msgid "Passkey name"
+msgstr "Название ключа"
+
+#: src/text_evolver/templates/account.html:75
+msgid "Rename"
+msgstr "Переименовать"
+
+#: src/text_evolver/templates/account.html:77
+msgid "Removing your last passkey disables passkey sign-in and password recovery."
+msgstr "Удаление последнего ключа отключит вход по ключу и восстановление пароля."
+
+#: src/text_evolver/templates/account.html:80
+msgid "Remove passkey"
+msgstr "Удалить ключ"
+
+#: src/text_evolver/templates/account.html:84
+msgid "New passkey name"
+msgstr "Название нового ключа"
+
+#: src/text_evolver/templates/account.html:85
+msgid "My passkey"
+msgstr "Мой ключ"
+
+#: src/text_evolver/templates/account.html:86
+msgid "Activate WebAuthn or add a passkey"
+msgstr "Включить WebAuthn или добавить ключ"
+
+#: src/text_evolver/templates/account.html:88 src/text_evolver/templates/reauthenticate.html:4
+msgid "Authenticate again"
+msgstr "Подтвердить личность"
+
+#: src/text_evolver/templates/all_settings.html:7
+msgid "Your workspace"
+msgstr "Ваше рабочее пространство"
+
+#: src/text_evolver/templates/all_settings.html:8
+msgid "Settings"
+msgstr "Настройки"
+
+#: src/text_evolver/templates/all_settings.html:9
+msgid "Build reusable rules, then run them on your documents."
+msgstr "Создавайте правила преобразования и применяйте их к документам."
+
+#: src/text_evolver/templates/all_settings.html:13 src/text_evolver/templates/all_settings.html:15
+msgid "Saved settings"
+msgstr "Сохранённые настройки"
+
+#: src/text_evolver/templates/all_settings.html:16
+msgid "of"
+msgstr "из"
+
+#: src/text_evolver/templates/all_settings.html:26 src/text_evolver/templates/setting.html:236
+#: src/text_evolver/templates/setting.html:239
+msgid "Public"
+msgstr "Общедоступная"
+
+#: src/text_evolver/templates/all_settings.html:26 src/text_evolver/templates/setting.html:237
+#: src/text_evolver/templates/setting.html:240
+msgid "Private"
+msgstr "Личная"
+
+#: src/text_evolver/templates/all_settings.html:30
+#, python-format
+msgid "Actions for %(name)s"
+msgstr "Действия с настройкой %(name)s"
+
+#: src/text_evolver/templates/all_settings.html:40
+msgid "Edit setting"
+msgstr "Изменить настройку"
+
+#: src/text_evolver/templates/all_settings.html:44
+msgid "Delete setting"
+msgstr "Удалить настройку"
+
+#: src/text_evolver/templates/all_settings.html:48
+msgid "Delete this setting?"
+msgstr "Удалить эту настройку?"
+
+#: src/text_evolver/templates/all_settings.html:50
+msgid "Cancel"
+msgstr "Отмена"
+
+#: src/text_evolver/templates/all_settings.html:51
+msgid "Confirm"
+msgstr "Подтвердить"
+
+#: src/text_evolver/templates/all_settings.html:58
+msgid "No settings yet"
+msgstr "Настроек пока нет"
+
+#: src/text_evolver/templates/all_settings.html:59
+msgid "Create a setting to start building document conversion rules."
+msgstr "Создайте настройку, чтобы задать правила преобразования документов."
+
+#: src/text_evolver/templates/all_settings.html:70
+msgid "Add setting"
+msgstr "Добавить настройку"
+
+#: src/text_evolver/templates/auth_methods.html:5
+msgid "Sign in with Google"
+msgstr "Войти через Google"
+
+#: src/text_evolver/templates/auth_methods.html:8
+msgid "Sign in with a passkey"
+msgstr "Войти с ключом доступа"
+
+#: src/text_evolver/templates/auth_methods.html:9
+msgid "Forgot password? Use your enrolled passkey"
+msgstr "Забыли пароль? Используйте свой ключ доступа"
+
+#: src/text_evolver/templates/basis.html:5 src/text_evolver/templates/loging.html:8
+#: src/text_evolver/templates/loging.html:9 src/text_evolver/templates/register.html:8
+#: src/text_evolver/templates/register.html:9 src/text_evolver/web/routers/passkeys.py:56
+msgid "TEXT EVOLVER"
+msgstr "Эволюция текста"
+
+#: src/text_evolver/templates/google_complete.html:4
+msgid "Complete Google registration"
+msgstr "Завершение регистрации через Google"
+
+#: src/text_evolver/templates/google_complete.html:7
+msgid "Choose your login name"
+msgstr "Выберите имя для входа"
+
+#: src/text_evolver/templates/google_complete.html:9
+msgid "Create account"
+msgstr "Создать аккаунт"
+
+#: src/text_evolver/templates/logged_basis.html:11 src/text_evolver/templates/logged_basis.html:12
+msgid "Search settings"
+msgstr "Поиск настроек"
+
+#: src/text_evolver/templates/logged_basis.html:13
+msgid "Search"
+msgstr "Поиск"
+
+#: src/text_evolver/templates/logged_basis.html:21
+msgid "Processing files"
+msgstr "Обработка файлов"
+
+#: src/text_evolver/templates/logged_basis.html:24
+msgid "Waits "
+msgstr "Ожидание "
+
+#: src/text_evolver/templates/logged_basis.html:30
+msgid "Terminate"
+msgstr "Остановить"
+
+#: src/text_evolver/templates/logged_basis.html:36
+msgid "Log out"
+msgstr "Выйти"
+
+#: src/text_evolver/templates/loging.html:5 src/text_evolver/templates/register.html:5
+msgid "About Text Evolver"
+msgstr "Об «Эволюции текста»"
+
+#: src/text_evolver/templates/loging.html:16 src/text_evolver/templates/register.html:16
+msgid "What Text Evolver does"
+msgstr "Что делает «Эволюция текста»"
+
+#: src/text_evolver/templates/loging.html:17 src/text_evolver/templates/register.html:17
+msgid ""
+"Create reusable conversion rules for DOCX, EPUB, HTML, and FB2 documents, process files in an isolated "
+"workspace, and download the finished result as a ZIP."
+msgstr ""
+"Создавайте правила преобразования документов DOCX, EPUB, HTML и FB2, обрабатывайте файлы в отдельном "
+"рабочем пространстве и скачивайте результат в ZIP-архиве."
+
+#: src/text_evolver/templates/loging.html:24
+msgid "Welcome back"
+msgstr "С возвращением"
+
+#: src/text_evolver/templates/loging.html:25
+msgid "Sign in to manage settings and process your documents."
+msgstr "Войдите, чтобы управлять настройками и обрабатывать документы."
+
+#: src/text_evolver/templates/loging.html:30
+msgid "Sign in"
+msgstr "Войти"
+
+#: src/text_evolver/templates/loging.html:33
+msgid "New to Text Evolver?"
+msgstr "Впервые в «Эволюции текста»?"
+
+#: src/text_evolver/templates/loging.html:33
+msgid "Create an account"
+msgstr "Создать аккаунт"
+
+#: src/text_evolver/templates/reauthenticate.html:5
+msgid "Confirm your identity before changing account security. Your session expiration will stay the same."
+msgstr "Подтвердите личность перед изменением безопасности аккаунта. Срок действия сессии останется прежним."
+
+#: src/text_evolver/templates/reauthenticate.html:11
+msgid "Continue"
+msgstr "Продолжить"
+
+#: src/text_evolver/templates/reauthenticate.html:14
+msgid "Authenticate with a passkey"
+msgstr "Подтвердить вход ключом доступа"
+
+#: src/text_evolver/templates/reauthenticate.html:21
+msgid "Back to account settings"
+msgstr "Вернуться к настройкам аккаунта"
+
+#: src/text_evolver/templates/recover.html:4
+msgid "Forgot password"
+msgstr "Восстановление пароля"
+
+#: src/text_evolver/templates/recover.html:5
+msgid "Password recovery requires a passkey you previously enrolled in your account."
+msgstr "Для восстановления пароля нужен ключ доступа, ранее добавленный в ваш аккаунт."
+
+#: src/text_evolver/templates/recover.html:6
+msgid "Verify passkey and reset password"
+msgstr "Подтвердить ключ и восстановить пароль"
+
+#: src/text_evolver/templates/recover.html:7
+msgid "Back to sign-in"
+msgstr "Вернуться ко входу"
+
+#: src/text_evolver/templates/register.html:24
+msgid "Create your account"
+msgstr "Создайте аккаунт"
+
+#: src/text_evolver/templates/register.html:25
+msgid "Save reusable settings and process documents in your workspace."
+msgstr "Сохраняйте настройки и обрабатывайте документы в своём рабочем пространстве."
+
+#: src/text_evolver/templates/register.html:32
+msgid "Register"
+msgstr "Зарегистрироваться"
+
+#: src/text_evolver/templates/register.html:35
+msgid "Already registered?"
+msgstr "Уже зарегистрированы?"
+
+#: src/text_evolver/templates/register.html:35
+msgid "Sign in instead"
+msgstr "Войти в аккаунт"
+
+#: src/text_evolver/templates/reset_password.html:4
+msgid "Set a new password"
+msgstr "Создайте новый пароль"
+
+#: src/text_evolver/templates/reset_password.html:11
+msgid "Reset password and sign out all sessions"
+msgstr "Сменить пароль и завершить все сессии"
+
+#: src/text_evolver/templates/search.html:9
+msgid "Settings library"
+msgstr "Библиотека настроек"
+
+#: src/text_evolver/templates/search.html:10 src/text_evolver/templates/search.html:42
+msgid "Search results"
+msgstr "Результаты поиска"
+
+#: src/text_evolver/templates/search.html:12
+#, python-format
+msgid "%(count)s setting found"
+msgid_plural "%(count)s settings found"
+msgstr[0] "Найдена %(count)s настройка"
+msgstr[1] "Найдено %(count)s настройки"
+msgstr[2] "Найдено %(count)s настроек"
+
+#: src/text_evolver/templates/search.html:12
+#, python-format
+msgid "for “%(phrase)s”"
+msgstr "по запросу «%(phrase)s»"
+
+#: src/text_evolver/templates/search.html:13
+#, python-format
+msgid "Showing %(start)s–%(end)s"
+msgstr "Показаны %(start)s–%(end)s"
+
+#: src/text_evolver/templates/search.html:19
+msgid "My settings"
+msgstr "Мои настройки"
+
+#: src/text_evolver/templates/search.html:24 src/text_evolver/templates/setting.html:204
+msgid "Guide"
+msgstr "Справка"
+
+#: src/text_evolver/templates/search.html:33
+msgid "Search guide"
+msgstr "Справка по поиску"
+
+#: src/text_evolver/templates/search.html:34 src/text_evolver/templates/setting.html:140
+msgid "Close explanations"
+msgstr "Закрыть справку"
+
+#: src/text_evolver/templates/search.html:34 src/text_evolver/templates/setting.html:140
+msgid "×"
+msgstr "×"
+
+#: src/text_evolver/templates/search.html:36
+msgid "Search finds public settings and your own settings whose names contain your phrase."
+msgstr "Поиск находит общедоступные и ваши собственные настройки, названия которых содержат вашу фразу."
+
+#: src/text_evolver/templates/search.html:37
+msgid ""
+"Each result shows the setting name and owner. Open a result to review it, run it on files, or copy it to "
+"your account."
+msgstr ""
+"В результатах указаны название и владелец настройки. Откройте её для просмотра, обработки файлов или "
+"копирования в свой аккаунт."
+
+#: src/text_evolver/templates/search.html:38
+msgid "Use Previous and Next to move between result pages, or My settings to return to your personal workspace."
+msgstr ""
+"Переходите между страницами кнопками «Назад» и «Далее». Кнопка «Мои настройки» вернёт вас в рабочее "
+"пространство."
+
+#: src/text_evolver/templates/search.html:48
+msgid "Created by you"
+msgstr "Создана вами"
+
+#: src/text_evolver/templates/search.html:48
+#, python-format
+msgid "Created by %(owner)s"
+msgstr "Автор: %(owner)s"
+
+#: src/text_evolver/templates/search.html:50
+msgid "Open setting"
+msgstr "Открыть настройку"
+
+#: src/text_evolver/templates/search.html:54
+msgid "No matching settings"
+msgstr "Настройки не найдены"
+
+#: src/text_evolver/templates/search.html:55
+msgid "Try another phrase or return to your personal settings."
+msgstr "Попробуйте другую фразу или вернитесь к своим настройкам."
+
+#: src/text_evolver/templates/search.html:60
+msgid "Search result pages"
+msgstr "Страницы результатов поиска"
+
+#: src/text_evolver/templates/search.html:64 src/text_evolver/templates/search.html:69
+msgid "Previous"
+msgstr "Назад"
+
+#: src/text_evolver/templates/search.html:72
+#, python-format
+msgid "Page %(number)s"
+msgstr "Страница %(number)s"
+
+#: src/text_evolver/templates/search.html:75 src/text_evolver/templates/search.html:80
+msgid "Next"
+msgstr "Далее"
+
+#: src/text_evolver/templates/setting.html:8
+msgid "Fandom of Name"
+msgstr "Фандом"
+
+#: src/text_evolver/templates/setting.html:12 src/text_evolver/templates/setting.html:347
+msgid "Activated"
+msgstr "Включён"
+
+#: src/text_evolver/templates/setting.html:14 src/text_evolver/templates/setting.html:25
+#: src/text_evolver/templates/setting.html:32 src/text_evolver/templates/setting.html:59
+#: src/text_evolver/templates/setting.html:87 src/text_evolver/templates/setting.html:114
+#: src/text_evolver/templates/setting.html:121 src/text_evolver/templates/setting.html:129
+#: src/text_evolver/templates/setting.html:350 src/text_evolver/templates/setting.html:353
+#: src/text_evolver/templates/setting.html:366 src/text_evolver/templates/setting.html:369
+#: src/text_evolver/templates/setting.html:378 src/text_evolver/templates/setting.html:381
+#: src/text_evolver/templates/setting.html:423 src/text_evolver/templates/setting.html:426
+#: src/text_evolver/templates/setting.html:475 src/text_evolver/templates/setting.html:478
+#: src/text_evolver/templates/setting.html:526 src/text_evolver/templates/setting.html:529
+#: src/text_evolver/templates/setting.html:538 src/text_evolver/templates/setting.html:541
+#: src/text_evolver/templates/setting.html:553 src/text_evolver/templates/setting.html:556
+msgid "Yes"
+msgstr "Да"
+
+#: src/text_evolver/templates/setting.html:15 src/text_evolver/templates/setting.html:26
+#: src/text_evolver/templates/setting.html:33 src/text_evolver/templates/setting.html:60
+#: src/text_evolver/templates/setting.html:88 src/text_evolver/templates/setting.html:115
+#: src/text_evolver/templates/setting.html:122 src/text_evolver/templates/setting.html:130
+#: src/text_evolver/templates/setting.html:351 src/text_evolver/templates/setting.html:354
+#: src/text_evolver/templates/setting.html:367 src/text_evolver/templates/setting.html:370
+#: src/text_evolver/templates/setting.html:379 src/text_evolver/templates/setting.html:382
+#: src/text_evolver/templates/setting.html:424 src/text_evolver/templates/setting.html:427
+#: src/text_evolver/templates/setting.html:476 src/text_evolver/templates/setting.html:479
+#: src/text_evolver/templates/setting.html:527 src/text_evolver/templates/setting.html:530
+#: src/text_evolver/templates/setting.html:539 src/text_evolver/templates/setting.html:542
+#: src/text_evolver/templates/setting.html:554 src/text_evolver/templates/setting.html:557
+msgid "No"
+msgstr "Нет"
+
+#: src/text_evolver/templates/setting.html:19 src/text_evolver/templates/setting.html:77
+#: src/text_evolver/templates/setting.html:359 src/text_evolver/templates/setting.html:464
+msgid "Separation"
+msgstr "Интервал"
+
+#: src/text_evolver/templates/setting.html:23 src/text_evolver/templates/setting.html:30
+msgid "Show value"
+msgstr "Показывать значение"
+
+#: src/text_evolver/templates/setting.html:40 src/text_evolver/templates/setting.html:403
+msgid "Unit conversion"
+msgstr "Преобразование единиц"
+
+#: src/text_evolver/templates/setting.html:41 src/text_evolver/templates/setting.html:69
+#: src/text_evolver/templates/setting.html:100 src/text_evolver/templates/setting.html:404
+#: src/text_evolver/templates/setting.html:456 src/text_evolver/templates/setting.html:511
+msgid "Delete"
+msgstr "Удалить"
+
+#: src/text_evolver/templates/setting.html:45 src/text_evolver/templates/setting.html:408
+msgid "Initial unit"
+msgstr "Исходная единица"
+
+#: src/text_evolver/templates/setting.html:49 src/text_evolver/templates/setting.html:412
+msgid "New unit"
+msgstr "Новая единица"
+
+#: src/text_evolver/templates/setting.html:53 src/text_evolver/templates/setting.html:416
+msgid "Convertation of unit"
+msgstr "Коэффициент преобразования"
+
+#: src/text_evolver/templates/setting.html:57 src/text_evolver/templates/setting.html:420
+msgid "Can be word"
+msgstr "Может быть словом"
+
+#: src/text_evolver/templates/setting.html:67 src/text_evolver/templates/setting.html:454
+msgid "Image add"
+msgstr "Вставка изображения"
+
+#: src/text_evolver/templates/setting.html:73 src/text_evolver/templates/setting.html:460
+msgid "Trigger phrase"
+msgstr "Фраза для вставки"
+
+#: src/text_evolver/templates/setting.html:81 src/text_evolver/templates/setting.html:468
+msgid "Explanation"
+msgstr "Подпись"
+
+#: src/text_evolver/templates/setting.html:85 src/text_evolver/templates/setting.html:119
+#: src/text_evolver/templates/setting.html:472 src/text_evolver/templates/setting.html:535
+msgid "Accept suffix (s/es/'/'s)"
+msgstr "Учитывать суффиксы (s/es/'/'s)"
+
+#: src/text_evolver/templates/setting.html:92 src/text_evolver/templates/setting.html:484
+msgid "Images"
+msgstr "Изображения"
+
+#: src/text_evolver/templates/setting.html:99
+msgid "Phrase conversion"
+msgstr "Замена фразы"
+
+#: src/text_evolver/templates/setting.html:104 src/text_evolver/templates/setting.html:515
+msgid "Change from"
+msgstr "Заменять"
+
+#: src/text_evolver/templates/setting.html:108 src/text_evolver/templates/setting.html:519
+msgid "Change to"
+msgstr "На"
+
+#: src/text_evolver/templates/setting.html:112 src/text_evolver/templates/setting.html:523
+msgid "Direct change"
+msgstr "Точная замена"
+
+#: src/text_evolver/templates/setting.html:126 src/text_evolver/templates/setting.html:547
+msgid "Regular expression"
+msgstr "Регулярное выражение"
+
+#: src/text_evolver/templates/setting.html:139
+msgid "Setting guide"
+msgstr "Справка по настройкам"
+
+#: src/text_evolver/templates/setting.html:142
+msgid "Text Evolver - this website allows you to alter content of your text-based files in certain ways"
+msgstr "«Эволюция текста» позволяет изменять содержимое текстовых документов по заданным правилам."
+
+#: src/text_evolver/templates/setting.html:143
+msgid "The way text will be altered is based on \"setting\" that you create and is connected yo your account"
+msgstr "Преобразование текста определяется настройкой, которую вы создаёте в своём аккаунте."
+
+#: src/text_evolver/templates/setting.html:145
+msgid "Name of setting: it's the way your setting will be named and viewed in \"My settings\" and when you search"
+msgstr "Название настройки отображается в разделе «Мои настройки» и в результатах поиска."
+
+#: src/text_evolver/templates/setting.html:146
+msgid "Publicity of setting: determines if your setting can be founded by users in search"
+msgstr "Общедоступность определяет, смогут ли другие пользователи найти настройку через поиск."
+
+#: src/text_evolver/templates/setting.html:147
+msgid ""
+"Clean empty of setting: determines if to clean lines without actual meaning (only symbols - no letters or "
+"digits) in the text"
+msgstr "Очистка пустых строк удаляет строки без букв и цифр, содержащие только другие символы."
+
+#: src/text_evolver/templates/setting.html:148
+msgid "Convert to utf of setting: determines if to convert symbols as < to their utf representation"
+msgstr "Преобразование в UTF заменяет представления специальных символов, например <, на соответствующие символы."
+
+#: src/text_evolver/templates/setting.html:149
+msgid "Digit separator: determines what will be recognised as a separator in decimals, only one can be chosen"
+msgstr "Десятичный разделитель определяет, какой символ используется в дробных числах. Выберите один вариант."
+
+#: src/text_evolver/templates/setting.html:150
+msgid ""
+"Expect feet: if you want your setting to recognise ft in the form of 6'7, choose it. They will then be "
+"converted to cm by default unless you set a unit conversion from the phrase \"feet\"."
+msgstr ""
+"Включите распознавание футов для записи вида 6'7. По умолчанию она преобразуется в сантиметры, если не "
+"задано правило для слова «feet»."
+
+#: src/text_evolver/templates/setting.html:152
+msgid "Fandom rules recognize names from the cached official data and insert matching images."
+msgstr "Правила фандома распознают имена из кеша официальных данных и вставляют подходящие изображения."
+
+#: src/text_evolver/templates/setting.html:153
+msgid "Fandom - Activated: determines if this fandom is activated. If yes, it can heavily affect performance speed"
+msgstr "Включение фандома активирует его правила и может значительно замедлить обработку."
+
+#: src/text_evolver/templates/setting.html:154
+msgid ""
+"Fandom - Separation: determines number of words that have to be between the same phrase to trigger image "
+"insertion. If it's \"1\", it will insert image only once"
+msgstr ""
+"Интервал фандома — минимальное число слов между повторениями фразы для вставки изображения. При значении 1 "
+"изображение вставляется один раз."
+
+#: src/text_evolver/templates/setting.html:155
+msgid ""
+"Fandom - Show height: tells if image should have this value on it (taken from official website). Won't be "
+"shown if it's not possible"
+msgstr "Показывать рост на изображении, если он доступен на официальном сайте."
+
+#: src/text_evolver/templates/setting.html:156
+msgid ""
+"Fandom - Show weight: tells if image should have this value on it (taken from official website). Won't be "
+"shown if it's not possible"
+msgstr "Показывать вес на изображении, если он доступен на официальном сайте."
+
+#: src/text_evolver/templates/setting.html:158
+msgid "Unit conversion: recognises a unit and then converts it to another."
+msgstr "Преобразование единиц распознаёт единицу измерения и заменяет её другой."
+
+#: src/text_evolver/templates/setting.html:159
+msgid "Unit - Initial unit: what word will be recognised and trigger change"
+msgstr "Исходная единица — слово, которое запускает преобразование."
+
+#: src/text_evolver/templates/setting.html:160
+msgid "Unit - New unit: the unit that unit will be replaced with"
+msgstr "Новая единица — название единицы после преобразования."
+
+#: src/text_evolver/templates/setting.html:161
+msgid "Unit - Convertation of unit: by what value number before unit will be multiplied"
+msgstr "Коэффициент — число, на которое умножается значение перед единицей."
+
+#: src/text_evolver/templates/setting.html:162
+msgid ""
+"Unit - Can be word: if initial unit can be as well act as word and not unit, choose it. Otherwise it will "
+"always change and add number before it, if there is none"
+msgstr ""
+"Включите «Может быть словом», если единица может встречаться как обычное слово. Иначе она всегда "
+"преобразуется, при необходимости с добавлением числа."
+
+#: src/text_evolver/templates/setting.html:164
+msgid "Image insertion: adds an image based on a phrase."
+msgstr "Вставка изображения срабатывает при обнаружении заданной фразы."
+
+#: src/text_evolver/templates/setting.html:165
+msgid ""
+"Image - Trigger phrase: what phrase will be recognised and trigger change (if it overlaps with fandom's "
+"value, they will merge)"
+msgstr "Фраза запускает вставку изображения. При совпадении с правилом фандома правила объединяются."
+
+#: src/text_evolver/templates/setting.html:166
+msgid ""
+"Image - Separation: determines number of words that have to be between the same phrase to trigger image "
+"insertion. If it's \"1\", it will insert image only once"
+msgstr ""
+"Интервал — минимальное число слов между вставками для одной фразы. При значении 1 изображение вставляется "
+"один раз."
+
+#: src/text_evolver/templates/setting.html:167
+msgid ""
+"Image - Explanation: a phrase that will be added on image as a sort of explanation. Must be at most 64 "
+"characters. If left empty, there will be none (and no space on image reserved)"
+msgstr "Подпись добавляется на изображение и содержит не более 64 символов. Пустая подпись не занимает места."
+
+#: src/text_evolver/templates/setting.html:168
+msgid "Image - Accept suffix: if recognition by phrase should accept having suffixes"
+msgstr "Учитывать суффиксы при распознавании фразы."
+
+#: src/text_evolver/templates/setting.html:169
+msgid ""
+"Image - Images: image(s) that will be added. If there are few, one will be chosen randomly. If it's merged "
+"with fandom's value, image will be chosen from these and fandom's. Also, if you opened already existing "
+"setting, living it empty will leave previous images and changing will set new"
+msgstr ""
+"При нескольких изображениях одно выбирается случайно. При объединении с фандомом используются оба набора. "
+"Оставьте поле пустым, чтобы сохранить прежние изображения, или выберите файлы для их замены."
+
+#: src/text_evolver/templates/setting.html:171
+msgid "Phrase replacement: recognises a phrase and then replaces it."
+msgstr "Замена фраз находит заданную фразу и заменяет её новой."
+
+#: src/text_evolver/templates/setting.html:172
+msgid "Phrase - Change from: what phrase will be recognised and trigger change"
+msgstr "«Заменять» — исходная фраза для поиска."
+
+#: src/text_evolver/templates/setting.html:173
+msgid "Phrase - Change to: on what phrase initial one will be changed"
+msgstr "«На» — фраза, которая заменит исходную."
+
+#: src/text_evolver/templates/setting.html:174
+msgid ""
+"Phrase - Direct change: if chosen, change will recognise only initial phrase as it's but will as well allow"
+" initial phrase to have special symbols"
+msgstr "Точная замена ищет исходную фразу без изменений, включая специальные символы."
+
+#: src/text_evolver/templates/setting.html:175
+msgid ""
+"Phrase - Accept suffix: if recognition by phrase should accept having suffixes. If direct change is chosen,"
+" it's irrelevant"
+msgstr "Учитывать суффиксы при поиске фразы. При точной замене этот параметр не используется."
+
+#: src/text_evolver/templates/setting.html:177
+msgid "Put here files to process: files for process"
+msgstr "Выберите файлы для обработки."
+
+#: src/text_evolver/templates/setting.html:178
+msgid "Save - your settings only: saves settings"
+msgstr "«Сохранить» сохраняет вашу настройку."
+
+#: src/text_evolver/templates/setting.html:179
+msgid "Save and run - your setting only: saves settings and then runs it on inputted files"
+msgstr "«Сохранить и запустить» сохраняет настройку и обрабатывает выбранные файлы."
+
+#: src/text_evolver/templates/setting.html:180
+msgid "Run: runs setting on inputted files"
+msgstr "«Запустить» обрабатывает выбранные файлы с текущей настройкой."
+
+#: src/text_evolver/templates/setting.html:181
+msgid ""
+"Copy - others setting only: will copy setting and add it to your own. Requires you to have free space for "
+"it. Publicity of copied setting will be set to private"
+msgstr "«Копировать» добавляет чужую настройку в ваш аккаунт при наличии свободного места. Копия становится личной."
+
+#: src/text_evolver/templates/setting.html:192
+msgid "Owned by you"
+msgstr "Ваша настройка"
+
+#: src/text_evolver/templates/setting.html:192
+msgid "Public setting"
+msgstr "Общедоступная настройка"
+
+#: src/text_evolver/templates/setting.html:194
+msgid "Configure transformations and run them on your documents."
+msgstr "Настройте преобразования и примените их к документам."
+
+#: src/text_evolver/templates/setting.html:199
+msgid "All settings"
+msgstr "Все настройки"
+
+#: src/text_evolver/templates/setting.html:213
+msgid "Configuration"
+msgstr "Конфигурация"
+
+#: src/text_evolver/templates/setting.html:214
+msgid "Name the setting and choose who can discover it."
+msgstr "Задайте название и доступность настройки для других пользователей."
+
+#: src/text_evolver/templates/setting.html:219
+msgid "Name of setting"
+msgstr "Название настройки"
+
+#: src/text_evolver/templates/setting.html:230
+msgid "Publicity of setting"
+msgstr "Общедоступность"
+
+#: src/text_evolver/templates/setting.html:251
+msgid "General conversion"
+msgstr "Общие преобразования"
+
+#: src/text_evolver/templates/setting.html:252
+msgid "Shared conversion behavior, including future general options."
+msgstr "Общие параметры преобразования документов."
+
+#: src/text_evolver/templates/setting.html:257
+msgid "Clean empty lines"
+msgstr "Очищать пустые строки"
+
+#: src/text_evolver/templates/setting.html:263 src/text_evolver/templates/setting.html:266
+msgid "Clean"
+msgstr "Очищать"
+
+#: src/text_evolver/templates/setting.html:264 src/text_evolver/templates/setting.html:267
+msgid "Don't clean"
+msgstr "Не очищать"
+
+#: src/text_evolver/templates/setting.html:276
+msgid "Convert to utf"
+msgstr "Преобразование в UTF"
+
+#: src/text_evolver/templates/setting.html:282 src/text_evolver/templates/setting.html:285
+msgid "Symbols to utf"
+msgstr "Преобразовывать символы"
+
+#: src/text_evolver/templates/setting.html:283 src/text_evolver/templates/setting.html:286
+msgid "Ignore"
+msgstr "Не преобразовывать"
+
+#: src/text_evolver/templates/setting.html:295
+msgid "Digit separator"
+msgstr "Десятичный разделитель"
+
+#: src/text_evolver/templates/setting.html:301 src/text_evolver/templates/setting.html:304
+msgid "Comma (,)"
+msgstr "Запятая (,)"
+
+#: src/text_evolver/templates/setting.html:302 src/text_evolver/templates/setting.html:305
+msgid "Dot (.)"
+msgstr "Точка (.)"
+
+#: src/text_evolver/templates/setting.html:314
+msgid "Expect feet"
+msgstr "Распознавать футы"
+
+#: src/text_evolver/templates/setting.html:320 src/text_evolver/templates/setting.html:323
+msgid "Feet notation (6'7) may appear"
+msgstr "Может встретиться запись футов (6'7)"
+
+#: src/text_evolver/templates/setting.html:321 src/text_evolver/templates/setting.html:324
+msgid "Feet notation won't appear"
+msgstr "Запись футов не ожидается"
+
+#: src/text_evolver/templates/setting.html:335
+msgid "Fandoms"
+msgstr "Фандомы"
+
+#: src/text_evolver/templates/setting.html:336
+msgid "Preconfigured fandoms with many rules included."
+msgstr "Готовые фандомы со встроенными правилами."
+
+#: src/text_evolver/templates/setting.html:363
+msgid "Show height"
+msgstr "Показывать рост"
+
+#: src/text_evolver/templates/setting.html:375
+msgid "Show weight"
+msgstr "Показывать вес"
+
+#: src/text_evolver/templates/setting.html:395
+msgid "Unit conversions"
+msgstr "Преобразования единиц"
+
+#: src/text_evolver/templates/setting.html:396
+msgid "Replace units and convert their numeric values."
+msgstr "Заменяйте единицы измерения и пересчитывайте значения."
+
+#: src/text_evolver/templates/setting.html:437
+msgid "Add unit conversion"
+msgstr "Добавить преобразование единиц"
+
+#: src/text_evolver/templates/setting.html:446
+msgid "Image insertions"
+msgstr "Вставки изображений"
+
+#: src/text_evolver/templates/setting.html:447
+msgid "Insert uploaded images when trigger phrases are found."
+msgstr "Вставляйте загруженные изображения при обнаружении заданных фраз."
+
+#: src/text_evolver/templates/setting.html:493
+msgid "Add image insertion"
+msgstr "Добавить вставку изображения"
+
+#: src/text_evolver/templates/setting.html:502
+msgid "Phrase replacements"
+msgstr "Замены фраз"
+
+#: src/text_evolver/templates/setting.html:503
+msgid "Replace matching phrases while preserving document structure."
+msgstr "Заменяйте фразы с сохранением структуры документа."
+
+#: src/text_evolver/templates/setting.html:567
+msgid "Add phrase replacement"
+msgstr "Добавить замену фразы"
+
+#: src/text_evolver/templates/setting.html:577
+msgid "Files to process"
+msgstr "Файлы для обработки"
+
+#: src/text_evolver/templates/setting.html:578
+msgid "No files selected"
+msgstr "Файлы не выбраны"
+
+#: src/text_evolver/templates/setting.html:583
+msgid "Choose files"
+msgstr "Выбрать файлы"
+
+#: src/text_evolver/templates/setting.html:590
+msgid "Close"
+msgstr "Закрыть"
+
+#: src/text_evolver/templates/setting.html:592
+msgid "Reset"
+msgstr "Сбросить"
+
+#: src/text_evolver/templates/setting.html:595
+msgid "Save"
+msgstr "Сохранить"
+
+#: src/text_evolver/templates/setting.html:596
+msgid "Save and run"
+msgstr "Сохранить и запустить"
+
+#: src/text_evolver/templates/setting.html:596 src/text_evolver/templates/setting.html:602
+msgid " (disabled)"
+msgstr " (недоступно)"
+
+#: src/text_evolver/templates/setting.html:600
+msgid "Copy to my settings"
+msgstr "Копировать в мои настройки"
+
+#: src/text_evolver/templates/setting.html:602
+msgid "Run"
+msgstr "Запустить"
+
+#: src/text_evolver/web/routers/accounts.py:31 src/text_evolver/web/auth.py:71 src/text_evolver/web/sessions.py:104
+msgid "Your session has expired. Please sign in again."
+msgstr "Сессия истекла. Войдите снова."
+
+#: src/text_evolver/web/routers/accounts.py:34
+msgid "Please authenticate again to continue."
+msgstr "Подтвердите личность, чтобы продолжить."
+
+#: src/text_evolver/web/routers/accounts.py:57
+msgid "Invalid language"
+msgstr "Недопустимый язык"
+
+#: src/text_evolver/web/routers/accounts.py:95
+msgid "Username is already registered"
+msgstr "Имя пользователя уже занято"
+
+#: src/text_evolver/web/routers/accounts.py:99 src/text_evolver/web/routers/accounts.py:167 src/text_evolver/web/routers/accounts.py:191
+#: src/text_evolver/web/routers/accounts.py:211 src/text_evolver/web/routers/accounts.py:216 src/text_evolver/web/flows.py:42
+#: src/text_evolver/web/flows.py:55 src/text_evolver/web/routers/google.py:119 src/text_evolver/web/routers/google.py:137
+#: src/text_evolver/web/routers/google.py:144 src/text_evolver/web/routers/google.py:153 src/text_evolver/web/routers/google.py:196
+#: src/text_evolver/web/routers/passkeys.py:96 src/text_evolver/web/routers/passkeys.py:101 src/text_evolver/web/routers/passkeys.py:114
+#: src/text_evolver/web/routers/passkeys.py:135 src/text_evolver/web/routers/passkeys.py:142 src/text_evolver/web/routers/passkeys.py:149
+#: src/text_evolver/web/routers/passkeys.py:161 src/text_evolver/web/routers/passkeys.py:166 src/text_evolver/web/routers/passkeys.py:170
+msgid "Authentication failed. Please try again."
+msgstr "Не удалось подтвердить личность. Попробуйте снова."
+
+#: src/text_evolver/web/routers/accounts.py:116 src/text_evolver/web/routers/accounts.py:134
+msgid "Keep at least one sign-in method."
+msgstr "Необходимо оставить хотя бы один способ входа."
+
+#: src/text_evolver/web/routers/accounts.py:123 src/text_evolver/web/routers/accounts.py:126
+msgid "Invalid passkey"
+msgstr "Недопустимый ключ доступа"
+
+#: src/text_evolver/web/routers/accounts.py:130 src/text_evolver/web/routers/passkeys.py:104
+msgid "Passkey name must contain 1 to 64 characters."
+msgstr "Название ключа должно содержать от 1 до 64 символов."
+
+#: src/text_evolver/web/routers/accounts.py:143 src/text_evolver/web/routers/google.py:82 src/text_evolver/web/routers/passkeys.py:43
+#: src/text_evolver/web/routers/passkeys.py:85
+msgid "Invalid account action"
+msgstr "Недопустимое действие с аккаунтом"
+
+#: src/text_evolver/web/auth.py:73
+msgid "Location"
+msgstr "Location"
+
+#: src/text_evolver/web/middlewares/csrf.py:25
+msgid "Invalid CSRF token"
+msgstr "Недопустимый CSRF-токен"
+
+#: src/text_evolver/web/flows.py:83 src/text_evolver/web/routers/routes.py:259
+msgid "Too many failed login attempts. Try again later"
+msgstr "Слишком много попыток входа. Попробуйте позже"
+
+#: src/text_evolver/web/routers/google.py:111
+msgid "Authentication failed or was cancelled. Please try again."
+msgstr "Подтверждение не удалось или было отменено. Попробуйте снова."
+
+#: src/text_evolver/web/routers/google.py:158 src/text_evolver/web/routers/google.py:168
+msgid "This Google account is already linked."
+msgstr "Этот аккаунт Google уже привязан."
+
+#: src/text_evolver/web/routers/google.py:161
+msgid "This account already has a linked Google identity."
+msgstr "К этому аккаунту уже привязан аккаунт Google."
+
+#: src/text_evolver/web/routers/google.py:206
+msgid "Username or Google account is already registered."
+msgstr "Имя пользователя или аккаунт Google уже зарегистрированы."
+
+#: src/text_evolver/web/routers/passkeys.py:53
+msgid "A maximum of 20 passkeys is allowed."
+msgstr "Можно добавить не более 20 ключей доступа."
+
+#: src/text_evolver/web/routers/passkeys.py:131
+msgid "This passkey is already registered."
+msgstr "Этот ключ доступа уже зарегистрирован."
+
+#: src/text_evolver/web/routers/routes.py:78
+#, python-format
+msgid "%(count)s file selected"
+msgid_plural "%(count)s files selected"
+msgstr[0] "Выбран %(count)s файл"
+msgstr[1] "Выбрано %(count)s файла"
+msgstr[2] "Выбрано %(count)s файлов"
+
+#: src/text_evolver/web/routers/routes.py:272
+msgid "User with these username and password does not exist"
+msgstr "Неверное имя пользователя или пароль"
+
+#: src/text_evolver/web/routers/routes.py:280
+#, python-format
+msgid "You successfully logged into account %(username)s"
+msgstr "Вы вошли в аккаунт %(username)s"
+
+#: src/text_evolver/web/routers/routes.py:312
+#, python-format
+msgid "You successfully registered account %(username)s"
+msgstr "Аккаунт %(username)s зарегистрирован"
+
+#: src/text_evolver/web/routers/routes.py:347 src/text_evolver/web/routers/routes.py:350
+msgid "Reached the allowed settings limit"
+msgstr "Достигнут лимит настроек"
+
+#: src/text_evolver/web/routers/routes.py:373
+msgid "Setting is used by a running job"
+msgstr "Настройка используется выполняющимся заданием"
+
+#: src/text_evolver/web/routers/routes.py:433 src/text_evolver/web/routers/routes.py:458
+msgid "This setting is private"
+msgstr "Эта настройка личная"
+
+#: src/text_evolver/web/routers/routes.py:472
+msgid "Only the owner can edit a setting"
+msgstr "Изменять настройку может только владелец"
+
+#: src/text_evolver/web/routers/routes.py:484
+#, python-format
+msgid "Setting change successful with name \"%(name)s\""
+msgstr "Настройка «%(name)s» сохранена"
+
+msgid "The form could not be submitted. Please try again."
+msgstr "Не удалось отправить форму. Попробуйте снова."
+
+msgid "The form could not be submitted. Check your connection and try again."
+msgstr "Не удалось отправить форму. Проверьте соединение и попробуйте снова."
+
+msgid "Setting could not be deleted."
+msgstr "Не удалось удалить настройку."
+
+msgid "Setting could not be deleted. Check your connection and try again."
+msgstr "Не удалось удалить настройку. Проверьте соединение и попробуйте снова."
+
+msgid "WebAuthn is not supported by this browser."
+msgstr "Этот браузер не поддерживает WebAuthn."
+
+msgid "Authenticate with your linked Google account before setting your first password."
+msgstr "Перед созданием первого пароля подтвердите вход через привязанный аккаунт Google."
+
+msgid "Text Evolver"
+msgstr "Эволюция текста"
+
+msgid "Copy"
+msgstr "Копировать"
+
+msgid "Please authenticate with Google to set your first password."
+msgstr "Подтвердите вход через Google, чтобы создать первый пароль."
+
+msgid "Cannot delete a setting while its job is queued or running"
+msgstr "Нельзя удалить настройку, пока её задание ожидает запуска или выполняется"
+
+msgid "No completed files to download"
+msgstr "Нет готовых файлов для скачивания"
+
+#: src/text_evolver/web/middlewares/body_size.py
+msgid "Request body exceeds the 512 MB size limit"
+msgstr "Размер тела запроса превышает ограничение в 512 МБ"
+

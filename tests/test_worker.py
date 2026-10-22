@@ -3,11 +3,15 @@ import threading
 from contextlib import contextmanager
 from pathlib import Path
 
+import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 import text_evolver.worker as worker
 from text_evolver.db.models import (
+    AuthFlow,
+    BrowserSession,
+    BrowserSessionFlash,
     ImageConversion,
     ImageConversionFile,
     LoginFailure,
@@ -17,6 +21,77 @@ from text_evolver.db.models import (
     UserAccount,
 )
 from text_evolver.services import job_paths, request_job_cancellation
+
+
+def test_worker_cleans_expired_or_revoked_sessions_and_their_flows_and_flashes(monkeypatch, database, app_settings):
+    install_worker_database(monkeypatch, database, app_settings)
+    now = dt.datetime.now(dt.UTC)
+    with Session(database) as db:
+        rows = [
+            BrowserSession(
+                token_hash=kind,
+                created_at=now - dt.timedelta(days=7),
+                expires_at=now + dt.timedelta(days=1) if kind != "expired" else now,
+                revoked_at=now if kind == "revoked" else None,
+            )
+            for kind in ["live", "expired", "revoked"]
+        ]
+        db.add_all(rows)
+        db.flush()
+        for index, row in enumerate(rows):
+            db.add(BrowserSessionFlash(
+                browser_session_token_hash=row.token_hash, category="error", message=f"flash-{index}",
+            ))
+            db.add(
+                AuthFlow(
+                    browser_session_token_hash=row.token_hash,
+                    purpose="login",
+                    token_hash=f"flow-{index}",
+                    data="{}",
+                    expires_at=now + dt.timedelta(minutes=5),
+                )
+            )
+        db.add(
+            AuthFlow(
+                browser_session_token_hash=rows[0].token_hash,
+                purpose="recover",
+                token_hash="expired-flow",
+                data="{}",
+                expires_at=now,
+            )
+        )
+        db.commit()
+    worker.cleanup_expired_sessions(now)
+    with Session(database) as db:
+        assert list(db.scalars(select(BrowserSession.token_hash))) == ["live"]
+        assert list(db.scalars(select(AuthFlow.token_hash))) == ["flow-0"]
+        assert list(db.scalars(select(BrowserSessionFlash.message))) == ["flash-0"]
+
+
+@pytest.mark.parametrize(
+    ("runner", "cleanup", "interval"),
+    [
+        ("run_login_failure_cleanup", "cleanup_expired_login_failures", "LOGIN_FAILURE_CLEANUP_SECONDS"),
+        ("run_session_cleanup", "cleanup_expired_sessions", "SESSION_CLEANUP_SECONDS"),
+    ],
+)
+def test_cleanup_loop_retries_after_failure_and_stops(monkeypatch, caplog, runner, cleanup, interval):
+    stopping = threading.Event()
+    calls = []
+
+    def clean():
+        calls.append(threading.current_thread().name)
+        if len(calls) == 1:
+            raise RuntimeError("Temporary cleanup failure")
+        stopping.set()
+        return 0
+
+    monkeypatch.setattr(worker, cleanup, clean)
+    monkeypatch.setattr(worker, interval, 0)
+    getattr(worker, runner)(stopping)
+
+    assert len(calls) == 2
+    assert "Temporary cleanup failure" in caplog.text
 
 
 def install_worker_database(monkeypatch, database, app_settings):
@@ -51,7 +126,9 @@ def create_queued_job(database) -> int:
 def test_worker_claims_and_completes_a_document(monkeypatch, database, app_settings):
     install_worker_database(monkeypatch, database, app_settings)
     job_id = create_queued_job(database)
-    _, origin, output = job_paths(app_settings, job_id)
+    paths = job_paths(app_settings, job_id)
+    origin = paths[1]
+    output = paths[2]
     origin.mkdir(parents=True)
     output.mkdir(parents=True)
     (origin / "book.html").write_text("<html><body><p>text</p></body></html>", encoding="utf-8")
@@ -101,9 +178,7 @@ def create_job_with_image(database, object_key: str) -> int:
         return job.id
 
 
-def test_worker_downloads_images_into_the_job_temp_directory(
-    monkeypatch, database, app_settings, image_storage
-):
+def test_worker_downloads_images_into_the_job_temp_directory(monkeypatch, database, app_settings, image_storage):
     install_worker_database(monkeypatch, database, app_settings)
     object_key = "users/1/settings/1/image.png"
     image_storage.objects[object_key] = b"image"
@@ -121,9 +196,7 @@ def test_worker_downloads_images_into_the_job_temp_directory(
     assert staged.read_bytes() == b"image"
 
 
-def test_worker_cleans_staging_after_image_download_failure(
-    monkeypatch, database, app_settings, image_storage
-):
+def test_worker_cleans_staging_after_image_download_failure(monkeypatch, database, app_settings, image_storage):
     install_worker_database(monkeypatch, database, app_settings)
     job_id = create_job_with_image(database, "users/1/settings/1/missing.png")
     claimed = worker.claim_job()
@@ -192,15 +265,11 @@ def test_worker_deletes_login_failures_older_than_one_hour(monkeypatch, database
         assert session.scalar(select(LoginFailure).where(LoginFailure.username == "expired-user")) is None
         assert session.scalar(select(LoginFailure).where(LoginFailure.username == "recent-user")) is not None
         assert (
-            session.scalar(
-                select(LoginFailureByAccount).where(LoginFailureByAccount.username == "expired-account")
-            )
+            session.scalar(select(LoginFailureByAccount).where(LoginFailureByAccount.username == "expired-account"))
             is None
         )
         assert (
-            session.scalar(
-                select(LoginFailureByAccount).where(LoginFailureByAccount.username == "recent-account")
-            )
+            session.scalar(select(LoginFailureByAccount).where(LoginFailureByAccount.username == "recent-account"))
             is not None
         )
 
@@ -238,8 +307,9 @@ def test_worker_pool_runs_configured_jobs_in_parallel(monkeypatch, app_settings)
     stopping = threading.Event()
     jobs = [worker.ClaimedJob(id=value, setting_id=value) for value in range(1, 4)]
     lock = threading.Lock()
-    barrier = threading.Barrier(settings.worker_concurrency)
+    barrier = threading.Barrier(settings.worker_concurrency + 2)
     processed: dict[int, str] = {}
+    cleanup_threads: dict[str, str] = {}
 
     def claim_job():
         with lock:
@@ -251,10 +321,23 @@ def test_worker_pool_runs_configured_jobs_in_parallel(monkeypatch, app_settings)
         if len(processed) == settings.worker_concurrency:
             stopping.set()
 
+    def clean_login_failures():
+        cleanup_threads["login"] = threading.current_thread().name
+        barrier.wait(timeout=5)
+        return 0
+
+    def clean_sessions():
+        cleanup_threads["sessions"] = threading.current_thread().name
+        barrier.wait(timeout=5)
+
     monkeypatch.setattr(worker, "claim_job", claim_job)
     monkeypatch.setattr(worker, "run_claimed_job", run_claimed_job)
+    monkeypatch.setattr(worker, "cleanup_expired_login_failures", clean_login_failures)
+    monkeypatch.setattr(worker, "cleanup_expired_sessions", clean_sessions)
 
     worker.run_worker_pool(settings, stopping)
 
     assert set(processed) == {1, 2, 3}
     assert len(set(processed.values())) == settings.worker_concurrency
+    assert set(cleanup_threads) == {"login", "sessions"}
+    assert len(set(processed.values()) | set(cleanup_threads.values())) == settings.worker_concurrency + 2

@@ -1,0 +1,90 @@
+{% extends "logged_basis.html" %}
+{% block main_content %}
+<section class="page account-page">
+    <header class="page-heading"><h1>{{ translate('Account settings') }}</h1></header>
+    <section class="panel account-panel">
+        <h2>{{ translate('Login name') }}</h2>
+        <form action="{{ url_for('account_update') }}" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="action" value="username">
+            <label for="account-username">{{ translate('Username') }}</label>
+            <input id="account-username" name="username" value="{{ user.name }}" required minlength="4" maxlength="62" autocomplete="username">
+            <button class="button" type="submit">{{ translate('Save login name') }}</button>
+        </form>
+    </section>
+    <section class="panel account-panel">
+        <h2>{{ translate('Password') }}</h2>
+        <form action="{{ url_for('account_update') }}" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="action" value="password">
+            {% if has_password %}
+            <label for="current-password">{{ translate('Current password') }}</label>
+            <input id="current-password" name="current_password" type="password" autocomplete="current-password" required maxlength="128">
+            {% else %}<p>{{ translate('Authenticate with Google or a passkey to set your first password.') }}</p>{% endif %}
+            <label for="new-password">{{ translate('New password') }}</label>
+            <input id="new-password" name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="128">
+            <label for="confirm-password">{{ translate('Repeat password') }}</label>
+            <input id="confirm-password" name="confirm" type="password" autocomplete="new-password" required minlength="12" maxlength="128">
+            <button class="button" type="submit">{{ translate('Change password') if has_password else translate('Set password') }}</button>
+        </form>
+    </section>
+    <section class="panel account-panel">
+        <h2>{{ translate('Language') }}</h2>
+        <form action="{{ url_for('language') }}" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="next" value="/account/settings">
+            <label for="account-language">{{ translate('Interface language') }}</label>
+            <select id="account-language" name="language">
+                <option value="default" {{ 'selected' if language_preference == 'default' }}>{{ translate('Default (browser language)') }}</option>
+                <option value="en" {{ 'selected' if language_preference == 'en' }}>English</option>
+                <option value="ru" {{ 'selected' if language_preference == 'ru' }}>Русский</option>
+            </select>
+            <button class="button" type="submit">{{ translate('Save language') }}</button>
+        </form>
+    </section>
+    <section class="panel account-panel">
+        <h2>{{ translate('Google sign-in') }}</h2>
+        {% if google %}
+        <p>{{ translate('Google account connected') }}</p>
+        <form action="{{ url_for('google_start') }}" method="post" data-native-submit>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="purpose" value="reauthenticate">
+            <button class="button" type="submit">{{ translate('Authenticate with Google') }}</button>
+        </form>
+        <form action="{{ url_for('account_update') }}" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="unlink_google">
+            <button class="button" type="submit">{{ translate('Disconnect Google') }}</button>
+        </form>
+        {% elif google_enabled %}
+        <form action="{{ url_for('google_start') }}" method="post" data-native-submit>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="purpose" value="link">
+            <button class="button" type="submit">{{ translate('Connect Google') }}</button>
+        </form>
+        {% else %}<p>{{ translate('Google sign-in is not configured.') }}</p>{% endif %}
+    </section>
+    <section class="panel account-panel">
+        <h2>{{ translate('WebAuthn passkeys') }}</h2>
+        <p>{{ translate('Passkeys enable alternative sign-in and forgotten-password recovery.') }}</p>
+        <p>{{ ngettext('%(count)s passkey enrolled', '%(count)s passkeys enrolled', passkeys|length) }}</p>
+        {% for key in passkeys %}
+        <div class="passkey-row">
+            <p><strong>{{ key.name }}</strong> — {{ translate('Last used') }}: {{ key.last_used_at or translate('Never') }}</p>
+            <form action="{{ url_for('account_update') }}" method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="rename_passkey"><input type="hidden" name="passkey_id" value="{{ key.id }}">
+                <label for="key-{{ key.id }}">{{ translate('Passkey name') }}</label>
+                <input id="key-{{ key.id }}" name="name" value="{{ key.name }}" required maxlength="64">
+                <button class="button" type="submit">{{ translate('Rename') }}</button>
+            </form>
+            {% if passkeys|length == 1 %}<p>{{ translate('Removing your last passkey disables passkey sign-in and password recovery.') }}</p>{% endif %}
+            <form action="{{ url_for('account_update') }}" method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="remove_passkey"><input type="hidden" name="passkey_id" value="{{ key.id }}">
+                <button class="button button-danger" type="submit">{{ translate('Remove passkey') }}</button>
+            </form>
+        </div>
+        {% endfor %}
+        <label for="passkey-name">{{ translate('New passkey name') }}</label>
+        <input id="passkey-name" maxlength="64" value="{{ translate('My passkey') }}">
+        <button class="button" type="button" data-webauthn="register">{{ translate('Activate WebAuthn or add a passkey') }}</button>
+    </section>
+    <p><a href="{{ url_for('reauthenticate_page') }}">{{ translate('Authenticate again') }}</a></p>
+</section>
+{% endblock %}

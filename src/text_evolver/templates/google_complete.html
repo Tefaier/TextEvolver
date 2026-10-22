@@ -1,0 +1,12 @@
+{% extends "basis.html" %}
+{% block context %}
+<main class="account-dialog panel">
+    <h1>{{ translate('Complete Google registration') }}</h1>
+    <form action="{{ url_for('google_complete') }}" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label for="google-username">{{ translate('Choose your login name') }}</label>
+        <input id="google-username" name="username" autocomplete="username" required minlength="4" maxlength="62">
+        <button class="button" type="submit">{{ translate('Create account') }}</button>
+    </form>
+</main>
+{% endblock %}

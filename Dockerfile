@@ -10,7 +10,9 @@ RUN apt-get update \
 WORKDIR /build
 COPY pyproject.toml ./
 COPY src ./src
-RUN python -m pip wheel --wheel-dir /wheels .
+RUN python -m pip install 'Babel>=2.17,<3' \
+    && pybabel compile -d src/text_evolver/locales \
+    && python -m pip wheel --wheel-dir /wheels .
 
 FROM python:3.12-slim-bookworm AS runtime
 

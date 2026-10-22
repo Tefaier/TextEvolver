@@ -2,29 +2,35 @@
 
 {% block context %}
     <main class="auth-page">
-        <section class="auth-visual" aria-label="About Text Evolver">
+        <section class="auth-visual" aria-label="{{ translate('About Text Evolver') }}">
             <div class="auth-visual-content">
                 <div class="auth-image-wrap">
-                    <img src="{{ url_for('static', path='login.png') }}" class="auth-image" alt="Text Evolver">
+                    <div class="localized-logo" role="img" aria-label="{{ translate('TEXT EVOLVER') }}">
+                        <span class="logo-wordmark">{{ translate('TEXT EVOLVER') }}</span>
+                        <div class="logo-symbol logo-symbol-login">
+                            <img src="{{ url_for('static', path='login.png') }}" alt="">
+                        </div>
+                    </div>
                 </div>
                 <div class="auth-description">
-                    <h1>What Text Evolver does</h1>
-                    <p>Create reusable conversion rules for DOCX, EPUB, HTML, and FB2 documents, process files in an isolated workspace, and download the finished result as a ZIP.</p>
+                    <h1>{{ translate('What Text Evolver does') }}</h1>
+                    <p>{{ translate('Create reusable conversion rules for DOCX, EPUB, HTML, and FB2 documents, process files in an isolated workspace, and download the finished result as a ZIP.') }}</p>
                 </div>
             </div>
         </section>
         <section class="auth-form-panel">
             <form class="auth-form" action="{{ url_for('login') }}" method="post">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <h2>Welcome back</h2>
-                <p class="auth-form-description">Sign in to manage settings and process your documents.</p>
-                <label for="username">Username</label>
+                <h2>{{ translate('Welcome back') }}</h2>
+                <p class="auth-form-description">{{ translate('Sign in to manage settings and process your documents.') }}</p>
+                <label for="username">{{ translate('Username') }}</label>
                 <input id="username" name="username" autocomplete="username" required minlength="4" maxlength="62">
-                <label for="password">Password</label>
+                <label for="password">{{ translate('Password') }}</label>
                 <input id="password" name="password" type="password" autocomplete="current-password" required minlength="4" maxlength="128">
-                <button class="button button-primary button-block" type="submit" name="subm">Sign in</button>
+                <button class="button button-primary button-block" type="submit" name="subm">{{ translate('Sign in') }}</button>
             </form>
-            <p class="auth-alternative">New to Text Evolver? <a href="{{ url_for('register_page') }}">Create an account</a></p>
+            {% include "auth_methods.html" %}
+            <p class="auth-alternative">{{ translate('New to Text Evolver?') }} <a href="{{ url_for('register_page') }}">{{ translate('Create an account') }}</a></p>
         </section>
     </main>
 {% endblock %}

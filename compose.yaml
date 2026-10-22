@@ -109,12 +109,22 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY}
       S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8000}
+      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-localhost}
+      WEBAUTHN_ORIGIN: ${WEBAUTHN_ORIGIN:-http://localhost:8000}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       UPLOAD_LIMIT_BYTES: ${UPLOAD_LIMIT_BYTES:-26214400}
-      SETTING_LIMIT_BYTES: ${SETTING_LIMIT_BYTES:-536870912}
       RESULTS_PER_PAGE: ${RESULTS_PER_PAGE:-50}
       WEBSOCKET_UPDATE_SECONDS: ${WEBSOCKET_UPDATE_SECONDS:-5}
       WEBSOCKET_MAX_CONNECTIONS: ${WEBSOCKET_MAX_CONNECTIONS:-100}
     command: ["uvicorn", "text_evolver.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=172.30.0.10"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      start_period: 20s
+      retries: 5
     expose:
       - "8000"
     volumes:

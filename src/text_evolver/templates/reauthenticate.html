@@ -1,0 +1,23 @@
+{% extends "basis.html" %}
+{% block context %}
+<main class="account-dialog panel">
+    <h1>{{ translate('Authenticate again') }}</h1>
+    <p>{{ translate('Confirm your identity before changing account security. Your session expiration will stay the same.') }}</p>
+    {% if has_password %}
+    <form action="{{ url_for('reauthenticate') }}" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label for="reauth-password">{{ translate('Password') }}</label>
+        <input id="reauth-password" name="password" type="password" autocomplete="current-password" required maxlength="128">
+        <button class="button" type="submit">{{ translate('Continue') }}</button>
+    </form>
+    {% endif %}
+    {% if has_passkey %}<button class="button" type="button" data-webauthn="reauthenticate">{{ translate('Authenticate with a passkey') }}</button>{% endif %}
+    {% if has_google and google_enabled %}
+    <form action="{{ url_for('google_start') }}" method="post" data-native-submit>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="purpose" value="reauthenticate">
+        <button class="button" type="submit">{{ translate('Authenticate with Google') }}</button>
+    </form>
+    {% endif %}
+    <a href="{{ url_for('account_settings') }}">{{ translate('Back to account settings') }}</a>
+</main>
+{% endblock %}

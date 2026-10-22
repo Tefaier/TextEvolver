@@ -5,6 +5,7 @@ from functools import lru_cache
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
+from starlette.requests import HTTPConnection
 
 from text_evolver.config import get_application_settings
 
@@ -20,6 +21,7 @@ def get_engine() -> Engine:
         connect_args=connect_args,
         poolclass=NullPool,
         pool_pre_ping=True,
+        hide_parameters=True,
     )
 
 
@@ -34,6 +36,5 @@ def session_scope() -> Generator[Session, None, None]:
             raise
 
 
-def get_db() -> Generator[Session, None, None]:
-    with session_scope() as session:
-        yield session
+def get_db(connection: HTTPConnection) -> Generator[Session, None, None]:
+    yield connection.scope["db"]

@@ -4,7 +4,7 @@ from collections.abc import Callable, Iterable
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, BinaryIO
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import boto3
 from boto3.exceptions import Boto3Error
@@ -41,7 +41,7 @@ class ImageStorage:
         return cls(client, settings.s3_bucket)
 
     @staticmethod
-    def object_key(user_id: int, setting_id: int, filename: str | None = None) -> str:
+    def object_key(user_id: UUID, setting_id: int, filename: str | None = None) -> str:
         suffix = Path(filename or "").suffix.lower()
         if len(suffix) > 12 or not suffix[1:].isalnum():
             suffix = ""

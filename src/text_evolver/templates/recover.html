@@ -1,0 +1,9 @@
+{% extends "basis.html" %}
+{% block context %}
+<main class="account-dialog panel">
+    <h1>{{ translate('Forgot password') }}</h1>
+    <p>{{ translate('Password recovery requires a passkey you previously enrolled in your account.') }}</p>
+    <button class="button" type="button" data-webauthn="recover">{{ translate('Verify passkey and reset password') }}</button>
+    <p><a href="{{ url_for('login_page') }}">{{ translate('Back to sign-in') }}</a></p>
+</main>
+{% endblock %}

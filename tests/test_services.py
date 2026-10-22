@@ -1,6 +1,7 @@
 import asyncio
 from io import BytesIO
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import select
@@ -21,16 +22,14 @@ from text_evolver.db.models import (
 )
 from text_evolver.image_storage import ImageStorageChanges
 from text_evolver.services import (
-    ImageSubmission,
-    ValidationError,
     _acquire_create_job_lock,
     _calculate_row_changes,
     _lock_setting_for_job,
-    _validate_image_submission_size,
     copy_setting,
     lock_setting_jobs_for_deletion,
     update_setting_from_form,
 )
+from text_evolver.web.validation_utils import ValidationError, validate_image_upload_size
 
 
 class TrackingUploadFile(UploadFile):
@@ -59,63 +58,81 @@ def test_calculate_row_changes_matches_duplicate_values_one_for_one():
     assert changes.added == ({"value": "added"},)
 
 
-def test_oversized_upload_is_rejected_before_storage_is_used():
-    upload = TrackingUploadFile(b"123456", "large.png")
-    submission = ImageSubmission("Example", 1, "", False, None, (upload,))
-
-    with pytest.raises(ValidationError, match="size limit"):
-        _validate_image_submission_size([submission], {}, setting_limit_bytes=5)
-
-    assert upload.read_sizes == []
-
-
 def test_empty_upload_is_rejected_before_content_is_read():
     upload = TrackingUploadFile(b"", "empty.png")
-    submission = ImageSubmission("Example", 1, "", False, None, (upload,))
 
     with pytest.raises(ValidationError, match="is empty"):
-        _validate_image_submission_size([submission], {}, setting_limit_bytes=5)
+        validate_image_upload_size(upload.size, upload.filename)
 
     assert upload.read_sizes == []
 
 
-def test_combined_upload_size_is_checked_before_any_content_is_read():
-    first = TrackingUploadFile(b"1234", "first.png")
-    second = TrackingUploadFile(b"5678", "second.png")
-    submission = ImageSubmission("Example", 1, "", False, None, (first, second))
+def test_unknown_upload_size_is_rejected_before_content_is_read():
+    upload = TrackingUploadFile(b"1234", "unknown.png")
+    upload.size = None
 
-    with pytest.raises(ValidationError, match="size limit"):
-        _validate_image_submission_size([submission], {}, setting_limit_bytes=7)
+    with pytest.raises(ValidationError, match="Cannot determine"):
+        validate_image_upload_size(upload.size, upload.filename)
 
-    assert first.read_sizes == []
-    assert second.read_sizes == []
+    assert upload.read_sizes == []
+
+
+@pytest.mark.parametrize("case", ["empty-upload", "missing-stored-images", "large-stored-images"])
+def test_image_integrity_is_preserved_without_stored_size_limit(database, app_settings, image_storage, case):
+    with Session(database) as session:
+        owner = UserAccount(id=uuid4(), username="image-validation")
+        session.add(owner)
+        session.flush()
+        setting = Setting(owner_id=owner.id, name="Images")
+        session.add(setting)
+        session.flush()
+        conversion = ImageConversion(
+            setting_id=setting.id, phrase="trigger", separation=1, explanation="", mutations=False,
+        )
+        session.add(conversion)
+        session.flush()
+        if case == "large-stored-images":
+            session.add(ImageConversionFile(
+                image_conversion_id=conversion.id, object_key="existing-image",
+                size_bytes=536_870_913, position=0,
+            ))
+            session.flush()
+        token = f"existing-{conversion.id}"
+        fields = [
+            ("set_name", "Images"), ("set_public", "False"), ("set_empty", "False"),
+            ("set_utf", "False"), ("set_coma_sep", "False"), ("set_expect_feet", "False"),
+            ("image_token", token), ("image_phrase", "trigger"),
+            ("image_separation", "1"), ("image_expl", ""), ("image_mutations", "False"),
+        ]
+        if case == "empty-upload":
+            fields.append((f"image_files_{token}", TrackingUploadFile(b"", "empty.png")))
+        form = FormData(fields)
+        changes = ImageStorageChanges(image_storage)
+        operation = update_setting_from_form(session, setting.id, form, app_settings, image_storage, changes)
+        if case == "large-stored-images":
+            asyncio.run(operation)
+        else:
+            message = "is empty" if case == "empty-upload" else "no stored images"
+            with pytest.raises(ValidationError, match=message):
+                asyncio.run(operation)
+        assert image_storage.objects == {}
 
 
 def test_create_job_uses_postgresql_transaction_lock_for_user():
     executed = []
     session = SimpleNamespace(
-        get_bind=lambda: SimpleNamespace(dialect=SimpleNamespace(name="postgresql")),
         execute=lambda statement, parameters: executed.append((statement, parameters)),
     )
 
-    _acquire_create_job_lock(session, user_id=42)
+    user_id = uuid4()
+    _acquire_create_job_lock(session, user_id=user_id)
 
     assert len(executed) == 1
-    statement, parameters = executed[0]
-    assert str(statement) == "SELECT pg_advisory_xact_lock(:user_id)"
-    assert parameters == {"user_id": 42}
-
-
-def test_create_job_lock_is_skipped_for_sqlite():
-    executed = []
-    session = SimpleNamespace(
-        get_bind=lambda: SimpleNamespace(dialect=SimpleNamespace(name="sqlite")),
-        execute=lambda statement, parameters: executed.append((statement, parameters)),
-    )
-
-    _acquire_create_job_lock(session, user_id=42)
-
-    assert executed == []
+    execution = executed[0]
+    statement = execution[0]
+    parameters = execution[1]
+    assert str(statement) == "SELECT pg_advisory_xact_lock(hashtextextended(:user_id, 0))"
+    assert parameters == {"user_id": str(user_id)}
 
 
 def test_lock_setting_for_job_uses_for_share_nowait():
@@ -165,7 +182,6 @@ def test_lock_setting_jobs_for_deletion_uses_for_update():
 @pytest.mark.parametrize("job_status", ["queued", "running"])
 def test_update_setting_rejects_setting_used_by_active_job(
     database,
-    app_settings,
     image_storage,
     job_status: str,
 ):
@@ -195,7 +211,6 @@ def test_update_setting_rejects_setting_used_by_active_job(
                     session,
                     setting.id,
                     form,
-                    app_settings,
                     image_storage,
                     ImageStorageChanges(image_storage),
                 )
@@ -204,7 +219,7 @@ def test_update_setting_rejects_setting_used_by_active_job(
         assert setting.name == "Original"
 
 
-def test_update_setting_preserves_unchanged_rows(database, app_settings, image_storage):
+def test_update_setting_preserves_unchanged_rows(database, image_storage):
     with Session(database) as session:
         user = UserAccount(username="owner")
         session.add(user)
@@ -341,7 +356,6 @@ def test_update_setting_preserves_unchanged_rows(database, app_settings, image_s
                 session,
                 setting_id,
                 form,
-                app_settings,
                 image_storage,
                 storage_changes,
             )
@@ -441,7 +455,7 @@ def test_copy_setting_copies_image_objects_to_independent_keys(database, image_s
         assert image_storage.objects[source_key] == b"image"
 
 
-def test_new_image_object_is_deleted_when_database_rolls_back(database, app_settings, image_storage):
+def test_new_image_object_is_deleted_when_database_rolls_back(database, image_storage):
     with Session(database) as session:
         owner = UserAccount(username="rollback-owner")
         session.add(owner)
@@ -473,7 +487,6 @@ def test_new_image_object_is_deleted_when_database_rolls_back(database, app_sett
                 session,
                 setting.id,
                 form,
-                app_settings,
                 image_storage,
                 storage_changes,
             )
@@ -487,7 +500,7 @@ def test_new_image_object_is_deleted_when_database_rolls_back(database, app_sett
         assert session.scalar(select(ImageConversion).where(ImageConversion.setting_id == setting.id)) is None
 
 
-def test_removing_image_conversion_deletes_its_object_after_commit(database, app_settings, image_storage):
+def test_removing_image_conversion_deletes_its_object_after_commit(database, image_storage):
     with Session(database) as session:
         owner = UserAccount(username="remove-owner")
         session.add(owner)
@@ -532,7 +545,6 @@ def test_removing_image_conversion_deletes_its_object_after_commit(database, app
                 session,
                 setting.id,
                 form,
-                app_settings,
                 image_storage,
                 storage_changes,
             )
@@ -545,7 +557,7 @@ def test_removing_image_conversion_deletes_its_object_after_commit(database, app
         assert object_key in image_storage.deleted
 
 
-def test_update_setting_rejects_invalid_phrase_regex(database, app_settings, image_storage):
+def test_update_setting_rejects_invalid_phrase_regex(database, image_storage):
     with Session(database) as session:
         user = UserAccount(username="owner")
         session.add(user)
@@ -575,14 +587,13 @@ def test_update_setting_rejects_invalid_phrase_regex(database, app_settings, ima
                     session,
                     setting.id,
                     form,
-                    app_settings,
                     image_storage,
                     ImageStorageChanges(image_storage),
                 )
             )
 
 
-def test_update_setting_forces_regex_false_for_non_direct_phrase(database, app_settings, image_storage):
+def test_update_setting_forces_regex_false_for_non_direct_phrase(database, image_storage):
     with Session(database) as session:
         user = UserAccount(username="owner")
         session.add(user)
@@ -611,7 +622,6 @@ def test_update_setting_forces_regex_false_for_non_direct_phrase(database, app_s
                 session,
                 setting.id,
                 form,
-                app_settings,
                 image_storage,
                 ImageStorageChanges(image_storage),
             )
@@ -691,7 +701,6 @@ def _setting_form_for_length_case(field_name: str, value: str) -> FormData:
 )
 def test_update_setting_rejects_overlong_text_fields(
     database,
-    app_settings,
     image_storage,
     field_name: str,
     message: str,
@@ -711,7 +720,6 @@ def test_update_setting_rejects_overlong_text_fields(
                     session,
                     setting.id,
                     _setting_form_for_length_case(field_name, "x" * 65),
-                    app_settings,
                     image_storage,
                     changes,
                 )
@@ -720,7 +728,7 @@ def test_update_setting_rejects_overlong_text_fields(
         assert image_storage.objects == {}
 
 
-def test_update_setting_accepts_text_at_the_explicit_limit(database, app_settings, image_storage):
+def test_update_setting_accepts_text_at_the_explicit_limit(database, image_storage):
     with Session(database) as session:
         owner = UserAccount(username="length-boundary")
         session.add(owner)
@@ -734,7 +742,6 @@ def test_update_setting_accepts_text_at_the_explicit_limit(database, app_setting
                 session,
                 setting.id,
                 _setting_form_for_length_case("set_name", "x" * 64),
-                app_settings,
                 image_storage,
                 ImageStorageChanges(image_storage),
             )

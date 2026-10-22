@@ -92,7 +92,8 @@ class DocxDocumentAdapter(DocumentAdapter):
             raise RuntimeError("Document part has no containing paragraph")
         paragraph_element = self._last_paragraph._element
         paragraph_element.getparent().remove(paragraph_element)
-        self._last_paragraph._p = self._last_paragraph._element = None
+        self._last_paragraph._p = None
+        self._last_paragraph._element = None
         self._part_index = len(self._current_parts)
         self._clear_native_state()
 

@@ -5,129 +5,129 @@
         <div class="row" id="default_fandom"> {# fandom reference #}
             <div class="col-2">
                 <input value="name" name="fandom" type="hidden">
-                <label class="data_heading">Fandom of Name</label>
+                <label class="data_heading">{{ translate('Fandom of Name') }}</label>
             </div>
             <div class="col">
                 <div class="data_info">
-                    <label>Activated</label>
+                    <label>{{ translate('Activated') }}</label>
                     <select name="fandom_active">
-                        <option value="True">Yes</option>
-                        <option value="False">No</option>
+                        <option value="True">{{ translate('Yes') }}</option>
+                        <option value="False">{{ translate('No') }}</option>
                     </select>
                 </div>
                 <div class="data_info">
-                    <label>Separation </label>
+                    <label>{{ translate('Separation') }} </label>
                     <input name="fandom_separation" class="slim_input w_limit" type="number" value="1000" step="1" min="1">
                 </div>
                 <div class="data_info">
-                    <label>Show value</label>
+                    <label>{{ translate('Show value') }}</label>
                     <select name="fandom_value_1">
-                        <option value="True">Yes</option>
-                        <option value="False">No</option>
+                        <option value="True">{{ translate('Yes') }}</option>
+                        <option value="False">{{ translate('No') }}</option>
                     </select>
                 </div>
                 <div class="data_info">
-                    <label>Show value</label>
+                    <label>{{ translate('Show value') }}</label>
                     <select name="fandom_value_2">
-                        <option value="True">Yes</option>
-                        <option value="False">No</option>
+                        <option value="True">{{ translate('Yes') }}</option>
+                        <option value="False">{{ translate('No') }}</option>
                     </select>
                 </div>
             </div>
         </div>
         <div class="row" id="default_unit"> {# unit reference #}
             <div class="col-2">
-                <label class="data_heading">Unit conversion</label>
-                <button type="button" onclick="Delete_part(this)" class="control_buttons">Delete</button>
+                <label class="data_heading">{{ translate('Unit conversion') }}</label>
+                <button type="button" onclick="Delete_part(this)" class="control_buttons">{{ translate('Delete') }}</button>
             </div>
             <div class="col">
                 <div class="data_info">
-                    <label>Initial unit</label>
+                    <label>{{ translate('Initial unit') }}</label>
                     <input name="unit_from" class="slim_input" type="text" value="From" size="15" minlength="1" maxlength="64">
                 </div>
                 <div class="data_info">
-                    <label>New unit</label>
+                    <label>{{ translate('New unit') }}</label>
                     <input name="unit_to" class="slim_input" type="text" value="To" size="15" maxlength="64">
                 </div>
                 <div class="data_info">
-                    <label>Convertation of unit</label>
+                    <label>{{ translate('Convertation of unit') }}</label>
                     <input name="unit_convert" class="slim_input w_limit" type="number" value="1000" step="any" min="0">
                 </div>
                 <div class="data_info">
-                    <label>Can be word</label>
+                    <label>{{ translate('Can be word') }}</label>
                     <select name="unit_can">
-                        <option value="True">Yes</option>
-                        <option value="False">No</option>
+                        <option value="True">{{ translate('Yes') }}</option>
+                        <option value="False">{{ translate('No') }}</option>
                     </select>
                 </div>
             </div>
         </div>
         <div class="row" id="default_image"> {# image reference #}
             <div class="col-2">
-                <label class="data_heading">Image add</label>
+                <label class="data_heading">{{ translate('Image add') }}</label>
                 <input value="" name="image_token" type="hidden">
-                <button type="button" onclick="Delete_part(this)" class="control_buttons">Delete</button>
+                <button type="button" onclick="Delete_part(this)" class="control_buttons">{{ translate('Delete') }}</button>
             </div>
             <div class="col">
                 <div class="data_info">
-                    <label>Trigger phrase</label>
+                    <label>{{ translate('Trigger phrase') }}</label>
                     <input name="image_phrase" class="slim_input" type="text" value="Phrase" size="15" minlength="1" maxlength="64">
                 </div>
                 <div class="data_info">
-                    <label>Separation</label>
+                    <label>{{ translate('Separation') }}</label>
                     <input name="image_separation" class="slim_input w_limit" type="number" value="1000" step="1" min="1">
                 </div>
                 <div class="data_info">
-                    <label>Explanation</label>
+                    <label>{{ translate('Explanation') }}</label>
                     <input name="image_expl" class="slim_input" type="text" value="Explanation" size="15" maxlength="64">
                 </div>
                 <div class="data_info">
-                    <label>Accept suffix (s/es/'/'s)</label>
+                    <label>{{ translate("Accept suffix (s/es/'/'s)") }}</label>
                     <select name="image_mutations">
-                        <option value="True">Yes</option>
-                        <option value="False">No</option>
+                        <option value="True">{{ translate('Yes') }}</option>
+                        <option value="False">{{ translate('No') }}</option>
                     </select>
                 </div>
                 <div class="data_info">
-                    <label>Images</label>
+                    <label>{{ translate('Images') }}</label>
                     <input type="file" accept="image/*" multiple>
                 </div>
             </div>
         </div>
         <div class="row" id="default_text"> {# phrase reference #}
             <div class="col-2">
-                <label class="data_heading">Phrase conversion</label>
-                <button type="button" onclick="Delete_part(this)" class="control_buttons">Delete</button>
+                <label class="data_heading">{{ translate('Phrase conversion') }}</label>
+                <button type="button" onclick="Delete_part(this)" class="control_buttons">{{ translate('Delete') }}</button>
             </div>
             <div class="col">
                 <div class="data_info">
-                    <label>Change from</label>
+                    <label>{{ translate('Change from') }}</label>
                     <input name="phrase_from" class="slim_input" type="text" value="Phrase from" size="15" minlength="1" maxlength="64">
                 </div>
                 <div class="data_info">
-                    <label>Change to</label>
+                    <label>{{ translate('Change to') }}</label>
                     <input name="phrase_to" class="slim_input" type="text" value="Phrase to" size="15" maxlength="64">
                 </div>
                 <div class="data_info">
-                    <label>Direct change</label>
+                    <label>{{ translate('Direct change') }}</label>
                     <select name="phrase_direct" onchange="Sync_phrase_regex(this)">
-                        <option value="True">Yes</option>
-                        <option value="False">No</option>
+                        <option value="True">{{ translate('Yes') }}</option>
+                        <option value="False">{{ translate('No') }}</option>
                     </select>
                 </div>
                 <div class="data_info">
-                    <label>Accept suffix (s/es/'/'s)</label>
+                    <label>{{ translate("Accept suffix (s/es/'/'s)") }}</label>
                     <select name="phrase_mutations">
-                        <option value="True">Yes</option>
-                        <option value="False">No</option>
+                        <option value="True">{{ translate('Yes') }}</option>
+                        <option value="False">{{ translate('No') }}</option>
                     </select>
                 </div>
                 <div class="data_info">
-                    <label>Regular expression</label>
+                    <label>{{ translate('Regular expression') }}</label>
                     <input type="hidden" name="phrase_regex" value="False" data-phrase-regex-fallback disabled>
                     <select name="phrase_regex" onchange="Sync_phrase_regex(this)">
-                        <option value="True">Yes</option>
-                        <option value="False" selected>No</option>
+                        <option value="True">{{ translate('Yes') }}</option>
+                        <option value="False" selected>{{ translate('No') }}</option>
                     </select>
                 </div>
             </div>
@@ -136,49 +136,49 @@
     <div hidden id="Explanation" class="explanation-backdrop" role="dialog" aria-modal="true" aria-labelledby="explanation-title" onclick="Close_exp(event)">
         <div class="explanation-popup">
             <div class="explanation-header">
-                <h2 id="explanation-title">Setting guide</h2>
-                <button type="button" class="explanation-close" aria-label="Close explanations" onclick="Close_exp(event)">&times;</button>
+                <h2 id="explanation-title">{{ translate('Setting guide') }}</h2>
+                <button type="button" class="explanation-close" aria-label="{{ translate('Close explanations') }}" onclick="Close_exp(event)">{{ translate('×') }}</button>
             </div>
-            <p class="data_info">Text Evolver - this website allows you to alter content of your text-based files in certain ways</p>
-            <p class="data_info">The way text will be altered is based on "setting" that you create and is connected yo your account</p>
+            <p class="data_info">{{ translate('Text Evolver - this website allows you to alter content of your text-based files in certain ways') }}</p>
+            <p class="data_info">{{ translate('The way text will be altered is based on "setting" that you create and is connected yo your account') }}</p>
             <br>
-            <p class="data_info">Name of setting: it's the way your setting will be named and viewed in "My settings" and when you search</p>
-            <p class="data_info">Publicity of setting: determines if your setting can be founded by users in search</p>
-            <p class="data_info">Clean empty of setting: determines if to clean lines without actual meaning (only symbols - no letters or digits) in the text</p>
-            <p class="data_info">Convert to utf of setting: determines if to convert symbols as &lt; to their utf representation</p>
-            <p class="data_info">Digit separator: determines what will be recognised as a separator in decimals, only one can be chosen</p>
-            <p class="data_info">Expect feet: if you want your setting to recognise ft in the form of 6'7, choose it. They will then be converted to cm by default unless you set a unit conversion from the phrase "feet".</p>
+            <p class="data_info">{{ translate('Name of setting: it\'s the way your setting will be named and viewed in "My settings" and when you search') }}</p>
+            <p class="data_info">{{ translate('Publicity of setting: determines if your setting can be founded by users in search') }}</p>
+            <p class="data_info">{{ translate('Clean empty of setting: determines if to clean lines without actual meaning (only symbols - no letters or digits) in the text') }}</p>
+            <p class="data_info">{{ translate('Convert to utf of setting: determines if to convert symbols as < to their utf representation') }}</p>
+            <p class="data_info">{{ translate('Digit separator: determines what will be recognised as a separator in decimals, only one can be chosen') }}</p>
+            <p class="data_info">{{ translate('Expect feet: if you want your setting to recognise ft in the form of 6\'7, choose it. They will then be converted to cm by default unless you set a unit conversion from the phrase "feet".') }}</p>
             <br>
-            <p class="data_info">Fandom of {name}: a recognition of certain fandom based on official website. User can't add a new one. Its function is to add images to text if it finds name from fandom</p>
-            <p class="data_info">Fandom - Activated: determines if this fandom is activated. If yes, it can heavily affect performance speed</p>
-            <p class="data_info">Fandom - Separation: determines number of words that have to be between the same phrase to trigger image insertion. If it's "1", it will insert image only once</p>
-            <p class="data_info">Fandom - Show height: tells if image should have this value on it (taken from official website). Won't be shown if it's not possible</p>
-            <p class="data_info">Fandom - Show weight: tells if image should have this value on it (taken from official website). Won't be shown if it's not possible</p>
+            <p class="data_info">{{ translate('Fandom rules recognize names from the cached official data and insert matching images.') }}</p>
+            <p class="data_info">{{ translate('Fandom - Activated: determines if this fandom is activated. If yes, it can heavily affect performance speed') }}</p>
+            <p class="data_info">{{ translate('Fandom - Separation: determines number of words that have to be between the same phrase to trigger image insertion. If it\'s "1", it will insert image only once') }}</p>
+            <p class="data_info">{{ translate("Fandom - Show height: tells if image should have this value on it (taken from official website). Won't be shown if it's not possible") }}</p>
+            <p class="data_info">{{ translate("Fandom - Show weight: tells if image should have this value on it (taken from official website). Won't be shown if it's not possible") }}</p>
             <br>
-            <p class="data_info">Unit conversion: recognises a unit and then converts it to another.</p>
-            <p class="data_info">Unit - Initial unit: what word will be recognised and trigger change</p>
-            <p class="data_info">Unit - New unit: the unit that unit will be replaced with</p>
-            <p class="data_info">Unit - Convertation of unit: by what value number before unit will be multiplied</p>
-            <p class="data_info">Unit - Can be word: if initial unit can be as well act as word and not unit, choose it. Otherwise it will always change and add number before it, if there is none</p>
+            <p class="data_info">{{ translate('Unit conversion: recognises a unit and then converts it to another.') }}</p>
+            <p class="data_info">{{ translate('Unit - Initial unit: what word will be recognised and trigger change') }}</p>
+            <p class="data_info">{{ translate('Unit - New unit: the unit that unit will be replaced with') }}</p>
+            <p class="data_info">{{ translate('Unit - Convertation of unit: by what value number before unit will be multiplied') }}</p>
+            <p class="data_info">{{ translate('Unit - Can be word: if initial unit can be as well act as word and not unit, choose it. Otherwise it will always change and add number before it, if there is none') }}</p>
             <br>
-            <p class="data_info">Image insertion: adds an image based on a phrase.</p>
-            <p class="data_info">Image - Trigger phrase: what phrase will be recognised and trigger change (if it overlaps with fandom's value, they will merge)</p>
-            <p class="data_info">Image - Separation: determines number of words that have to be between the same phrase to trigger image insertion. If it's "1", it will insert image only once</p>
-            <p class="data_info">Image - Explanation: a phrase that will be added on image as a sort of explanation. Must be at most 64 characters. If left empty, there will be none (and no space on image reserved)</p>
-            <p class="data_info">Image - Accept suffix: if recognition by phrase should accept having suffixes</p>
-            <p class="data_info">Image - Images: image(s) that will be added. If there are few, one will be chosen randomly. If it's merged with fandom's value, image will be chosen from these and fandom's. Also, if you opened already existing setting, living it empty will leave previous images and changing will set new</p>
+            <p class="data_info">{{ translate('Image insertion: adds an image based on a phrase.') }}</p>
+            <p class="data_info">{{ translate("Image - Trigger phrase: what phrase will be recognised and trigger change (if it overlaps with fandom's value, they will merge)") }}</p>
+            <p class="data_info">{{ translate('Image - Separation: determines number of words that have to be between the same phrase to trigger image insertion. If it\'s "1", it will insert image only once') }}</p>
+            <p class="data_info">{{ translate('Image - Explanation: a phrase that will be added on image as a sort of explanation. Must be at most 64 characters. If left empty, there will be none (and no space on image reserved)') }}</p>
+            <p class="data_info">{{ translate('Image - Accept suffix: if recognition by phrase should accept having suffixes') }}</p>
+            <p class="data_info">{{ translate("Image - Images: image(s) that will be added. If there are few, one will be chosen randomly. If it's merged with fandom's value, image will be chosen from these and fandom's. Also, if you opened already existing setting, living it empty will leave previous images and changing will set new") }}</p>
             <br>
-            <p class="data_info">Phrase replacement: recognises a phrase and then replaces it.</p>
-            <p class="data_info">Phrase - Change from: what phrase will be recognised and trigger change</p>
-            <p class="data_info">Phrase - Change to: on what phrase initial one will be changed</p>
-            <p class="data_info">Phrase - Direct change: if chosen, change will recognise only initial phrase as it's but will as well allow initial phrase to have special symbols</p>
-            <p class="data_info">Phrase - Accept suffix: if recognition by phrase should accept having suffixes. If direct change is chosen, it's irrelevant</p>
+            <p class="data_info">{{ translate('Phrase replacement: recognises a phrase and then replaces it.') }}</p>
+            <p class="data_info">{{ translate('Phrase - Change from: what phrase will be recognised and trigger change') }}</p>
+            <p class="data_info">{{ translate('Phrase - Change to: on what phrase initial one will be changed') }}</p>
+            <p class="data_info">{{ translate("Phrase - Direct change: if chosen, change will recognise only initial phrase as it's but will as well allow initial phrase to have special symbols") }}</p>
+            <p class="data_info">{{ translate("Phrase - Accept suffix: if recognition by phrase should accept having suffixes. If direct change is chosen, it's irrelevant") }}</p>
             <br>
-            <p class="data_info">Put here files to process: files for process</p>
-            <p class="data_info">Save - your settings only: saves settings</p>
-            <p class="data_info">Save and run - your setting only: saves settings and then runs it on inputted files</p>
-            <p class="data_info">Run: runs setting on inputted files</p>
-            <p class="data_info">Copy - others setting only: will copy setting and add it to your own. Requires you to have free space for it. Publicity of copied setting will be set to private</p>
+            <p class="data_info">{{ translate('Put here files to process: files for process') }}</p>
+            <p class="data_info">{{ translate('Save - your settings only: saves settings') }}</p>
+            <p class="data_info">{{ translate('Save and run - your setting only: saves settings and then runs it on inputted files') }}</p>
+            <p class="data_info">{{ translate('Run: runs setting on inputted files') }}</p>
+            <p class="data_info">{{ translate('Copy - others setting only: will copy setting and add it to your own. Requires you to have free space for it. Publicity of copied setting will be set to private') }}</p>
             <br>
             <hr class="new" />
             <br>
@@ -189,19 +189,19 @@
     <section class="page editor-page">
         <header class="page-heading">
             <div>
-                <p class="eyebrow">{{ "Owned by you" if setting.owner_id == user.id else "Public setting" }}</p>
+                <p class="eyebrow">{{ translate("Owned by you") if setting.owner_id == user.id else translate("Public setting") }}</p>
                 <h1>{{ setting.name }}</h1>
-                <p>Configure transformations and run them on your documents.</p>
+                <p>{{ translate('Configure transformations and run them on your documents.') }}</p>
             </div>
             <div class="page-actions">
                 <button type="button" class="button" onclick="window.location.href='{{ url_for('my_settings') }}'">
                     <i class="fas fa-arrow-left" aria-hidden="true"></i>
-                    All settings
+                    {{ translate('All settings') }}
                 </button>
                 <button type="button" class="button explanation-button" onclick="Open_exp(this)"
                         aria-haspopup="dialog" aria-controls="Explanation" aria-expanded="false">
                     <i class="far fa-question-circle" aria-hidden="true"></i>
-                    Guide
+                    {{ translate('Guide') }}
                 </button>
             </div>
         </header>
@@ -210,13 +210,13 @@
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <section class="editor-section">
                     <div class="editor-section-copy">
-                        <h2>Configuration</h2>
-                        <p>Name the setting and choose who can discover it.</p>
+                        <h2>{{ translate('Configuration') }}</h2>
+                        <p>{{ translate('Name the setting and choose who can discover it.') }}</p>
                     </div>
                     <div class="editor-section-fields">
                 <div class="row">
                     <div class="col-2">
-                        <label class="data_heading">Name of setting</label>
+                        <label class="data_heading">{{ translate('Name of setting') }}</label>
                     </div>
                     <div class="col">
                         <div class="data_info">
@@ -227,17 +227,17 @@
                 <hr class="new" />
                 <div class="row">
                     <div class="col-2">
-                        <label class="data_heading">Publicity of setting</label>
+                        <label class="data_heading">{{ translate('Publicity of setting') }}</label>
                     </div>
                     <div class="col">
                         <div class="data_info">
                             <select name="set_public">
                                 {% if setting.public %}
-                                <option value="True" selected>Public</option>
-                                <option value="False">Private</option>
+                                <option value="True" selected>{{ translate('Public') }}</option>
+                                <option value="False">{{ translate('Private') }}</option>
                                 {% else %}
-                                <option value="True">Public</option>
-                                <option value="False" selected>Private</option>
+                                <option value="True">{{ translate('Public') }}</option>
+                                <option value="False" selected>{{ translate('Private') }}</option>
                                 {% endif %}
                             </select>
                         </div>
@@ -248,23 +248,23 @@
                 </section>
                 <section class="editor-section">
                     <div class="editor-section-copy">
-                        <h2>General conversion</h2>
-                        <p>Shared conversion behavior, including future general options.</p>
+                        <h2>{{ translate('General conversion') }}</h2>
+                        <p>{{ translate('Shared conversion behavior, including future general options.') }}</p>
                     </div>
                     <div class="editor-section-fields editor-section-fields-grid">
                 <div class="row">
                     <div class="col-2">
-                        <label class="data_heading">Clean empty lines</label>
+                        <label class="data_heading">{{ translate('Clean empty lines') }}</label>
                     </div>
                     <div class="col">
                         <div class="data_info">
                             <select name="set_empty">
                                 {% if setting.clean_empty %}
-                                <option value="True" selected>Clean</option>
-                                <option value="False">Don't clean</option>
+                                <option value="True" selected>{{ translate('Clean') }}</option>
+                                <option value="False">{{ translate("Don't clean") }}</option>
                                 {% else %}
-                                <option value="True">Clean</option>
-                                <option value="False" selected>Don't clean</option>
+                                <option value="True">{{ translate('Clean') }}</option>
+                                <option value="False" selected>{{ translate("Don't clean") }}</option>
                                 {% endif %}
                             </select>
                         </div>
@@ -273,17 +273,17 @@
                 <hr class="new" />
                 <div class="row">
                     <div class="col-2">
-                        <label class="data_heading">Convert to utf</label>
+                        <label class="data_heading">{{ translate('Convert to utf') }}</label>
                     </div>
                     <div class="col">
                         <div class="data_info">
                             <select name="set_utf">
                                 {% if setting.convert_to_utf %}
-                                <option value="True" selected>Symbols to utf</option>
-                                <option value="False">Ignore</option>
+                                <option value="True" selected>{{ translate('Symbols to utf') }}</option>
+                                <option value="False">{{ translate('Ignore') }}</option>
                                 {% else %}
-                                <option value="True">Symbols to utf</option>
-                                <option value="False" selected>Ignore</option>
+                                <option value="True">{{ translate('Symbols to utf') }}</option>
+                                <option value="False" selected>{{ translate('Ignore') }}</option>
                                 {% endif %}
                             </select>
                         </div>
@@ -292,17 +292,17 @@
                 <hr class="new" />
                 <div class="row">
                     <div class="col-2">
-                        <label class="data_heading">Digit separator</label>
+                        <label class="data_heading">{{ translate('Digit separator') }}</label>
                     </div>
                     <div class="col">
                         <div class="data_info">
                             <select name="set_coma_sep">
                                 {% if setting.use_comma_separator %}
-                                <option value="True" selected>Comma (,)</option>
-                                <option value="False">Dot (.)</option>
+                                <option value="True" selected>{{ translate('Comma (,)') }}</option>
+                                <option value="False">{{ translate('Dot (.)') }}</option>
                                 {% else %}
-                                <option value="True">Comma (,)</option>
-                                <option value="False" selected>Dot (.)</option>
+                                <option value="True">{{ translate('Comma (,)') }}</option>
+                                <option value="False" selected>{{ translate('Dot (.)') }}</option>
                                 {% endif %}
                             </select>
                         </div>
@@ -311,17 +311,17 @@
                 <hr class="new" />
                 <div class="row">
                     <div class="col-2">
-                        <label class="data_heading">Expect feet</label>
+                        <label class="data_heading">{{ translate('Expect feet') }}</label>
                     </div>
                     <div class="col">
                         <div class="data_info">
                             <select name="set_expect_feet">
                                 {% if setting.expect_feet %}
-                                <option value="True" selected>Feet notation (6'7) may appear</option>
-                                <option value="False">Feet notation won't appear</option>
+                                <option value="True" selected>{{ translate("Feet notation (6'7) may appear") }}</option>
+                                <option value="False">{{ translate("Feet notation won't appear") }}</option>
                                 {% else %}
-                                <option value="True">Feet notation (6'7) may appear</option>
-                                <option value="False" selected>Feet notation won't appear</option>
+                                <option value="True">{{ translate("Feet notation (6'7) may appear") }}</option>
+                                <option value="False" selected>{{ translate("Feet notation won't appear") }}</option>
                                 {% endif %}
                             </select>
                         </div>
@@ -332,8 +332,8 @@
                 </section>
                 <section class="editor-section fandom-section">
                     <div class="editor-section-copy">
-                        <h2>Fandoms</h2>
-                        <p>Preconfigured fandoms with many rules included.</p>
+                        <h2>{{ translate('Fandoms') }}</h2>
+                        <p>{{ translate('Preconfigured fandoms with many rules included.') }}</p>
                     </div>
                     <div class="editor-section-fields">
                 {% for fandom in setting.fandoms %}
@@ -344,42 +344,42 @@
                     </div>
                     <div class="col"> {# information of fandom #}
                         <div class="data_info"> {# fandom.active #}
-                            <label>Activated</label>
+                            <label>{{ translate('Activated') }}</label>
                             <select name="fandom_active">
                                 {% if fandom.active %}
-                                <option value="True" selected>Yes</option>
-                                <option value="False">No</option>
+                                <option value="True" selected>{{ translate('Yes') }}</option>
+                                <option value="False">{{ translate('No') }}</option>
                                 {% else %}
-                                <option value="True">Yes</option>
-                                <option value="False" selected>No</option>
+                                <option value="True">{{ translate('Yes') }}</option>
+                                <option value="False" selected>{{ translate('No') }}</option>
                                 {% endif %}
                             </select>
                         </div>
                         <div class="data_info"> {# fandom.separation #}
-                            <label>Separation</label>
+                            <label>{{ translate('Separation') }}</label>
                             <input name="fandom_separation" class="slim_input w_limit" type="number" value="{{ fandom.separation }}" step="1" min="1">
                         </div>
                         <div class="data_info"> {# fandom.support_value_1 #}
-                            <label>Show height</label>
+                            <label>{{ translate('Show height') }}</label>
                             <select name="fandom_value_1">
                                 {% if fandom.support_value_1 %}
-                                <option value="True" selected>Yes</option>
-                                <option value="False">No</option>
+                                <option value="True" selected>{{ translate('Yes') }}</option>
+                                <option value="False">{{ translate('No') }}</option>
                                 {% else %}
-                                <option value="True">Yes</option>
-                                <option value="False" selected>No</option>
+                                <option value="True">{{ translate('Yes') }}</option>
+                                <option value="False" selected>{{ translate('No') }}</option>
                                 {% endif %}
                             </select>
                         </div>
                         <div class="data_info"> {# fandom.support_value_2 #}
-                            <label>Show weight</label>
+                            <label>{{ translate('Show weight') }}</label>
                             <select name="fandom_value_2">
                                 {% if fandom.support_value_2 %}
-                                <option value="True" selected>Yes</option>
-                                <option value="False">No</option>
+                                <option value="True" selected>{{ translate('Yes') }}</option>
+                                <option value="False">{{ translate('No') }}</option>
                                 {% else %}
-                                <option value="True">Yes</option>
-                                <option value="False" selected>No</option>
+                                <option value="True">{{ translate('Yes') }}</option>
+                                <option value="False" selected>{{ translate('No') }}</option>
                                 {% endif %}
                             </select>
                         </div>
@@ -392,39 +392,39 @@
                 <section class="rule-section">
                     <header class="rule-section-heading">
                         <div>
-                            <h2>Unit conversions</h2>
-                            <p>Replace units and convert their numeric values.</p>
+                            <h2>{{ translate('Unit conversions') }}</h2>
+                            <p>{{ translate('Replace units and convert their numeric values.') }}</p>
                         </div>
                     </header>
                     <div class="rule-list">
                 {% for unit_conv in setting.unit_convs %}
                 <div class="row">
                     <div class="col-2">
-                        <label class="data_heading">Unit conversion</label>
-                        <button type="button" onclick="Delete_part(this)" class="control_buttons">Delete</button>
+                        <label class="data_heading">{{ translate('Unit conversion') }}</label>
+                        <button type="button" onclick="Delete_part(this)" class="control_buttons">{{ translate('Delete') }}</button>
                     </div>
                     <div class="col"> {# information of unit convertation #}
                         <div class="data_info"> {# unit_conv.phrase_from #}
-                            <label>Initial unit</label>
+                            <label>{{ translate('Initial unit') }}</label>
                             <input name="unit_from" class="slim_input" type="text" value="{{ unit_conv.phrase_from }}" size="15" minlength="1" maxlength="64">
                         </div>
                         <div class="data_info"> {# unit_conv.phrase_to #}
-                            <label>New unit</label>
+                            <label>{{ translate('New unit') }}</label>
                             <input name="unit_to" class="slim_input" type="text" value="{{ unit_conv.phrase_to }}" size="15" maxlength="64">
                         </div>
                         <div class="data_info"> {# unit_conv.conversion #}
-                            <label>Convertation of unit</label>
+                            <label>{{ translate('Convertation of unit') }}</label>
                             <input name="unit_convert" class="slim_input w_limit" type="number" value="{{ unit_conv.conversion }}" step="any" min="0">
                         </div>
                         <div class="data_info"> {# unit_conv.can_be_word #}
-                            <label>Can be word</label>
+                            <label>{{ translate('Can be word') }}</label>
                             <select name="unit_can">
                                 {% if unit_conv.can_be_word %}
-                                <option value="True" selected>Yes</option>
-                                <option value="False">No</option>
+                                <option value="True" selected>{{ translate('Yes') }}</option>
+                                <option value="False">{{ translate('No') }}</option>
                                 {% else %}
-                                <option value="True">Yes</option>
-                                <option value="False" selected>No</option>
+                                <option value="True">{{ translate('Yes') }}</option>
+                                <option value="False" selected>{{ translate('No') }}</option>
                                 {% endif %}
                             </select>
                         </div>
@@ -434,7 +434,7 @@
                 {% endfor %}
                 <div class="row">
                     <div class="col">
-                        <button type="button" onclick="Add_unit(this)" class="control_buttons">Add unit conversion</button>
+                        <button type="button" onclick="Add_unit(this)" class="control_buttons">{{ translate('Add unit conversion') }}</button>
                     </div>
                 </div>
                 <hr class="new" />
@@ -443,45 +443,45 @@
                 <section class="rule-section">
                     <header class="rule-section-heading">
                         <div>
-                            <h2>Image insertions</h2>
-                            <p>Insert uploaded images when trigger phrases are found.</p>
+                            <h2>{{ translate('Image insertions') }}</h2>
+                            <p>{{ translate('Insert uploaded images when trigger phrases are found.') }}</p>
                         </div>
                     </header>
                     <div class="rule-list">
                 {% for image_conv in setting.image_convs %}
                 <div class="row">
                     <div class="col-2">
-                        <label class="data_heading">Image add</label>
+                        <label class="data_heading">{{ translate('Image add') }}</label>
                         <input value="existing-{{ image_conv.id }}" name="image_token" type="hidden">
-                        <button type="button" onclick="Delete_part(this)" class="control_buttons">Delete</button>
+                        <button type="button" onclick="Delete_part(this)" class="control_buttons">{{ translate('Delete') }}</button>
                     </div>
                     <div class="col"> {# information of image_conv #}
                         <div class="data_info"> {# image_conv.phrase #}
-                            <label>Trigger phrase</label>
+                            <label>{{ translate('Trigger phrase') }}</label>
                             <input name="image_phrase" class="slim_input" type="text" value="{{ image_conv.phrase }}" size="15" minlength="1" maxlength="64">
                         </div>
                         <div class="data_info"> {# image_conv.separation #}
-                            <label>Separation</label>
+                            <label>{{ translate('Separation') }}</label>
                             <input name="image_separation" class="slim_input w_limit" type="number" value="{{ image_conv.separation }}" step="1" min="1">
                         </div>
                         <div class="data_info"> {# image_conv.explanation #}
-                            <label>Explanation</label>
+                            <label>{{ translate('Explanation') }}</label>
                             <input name="image_expl" class="slim_input" type="text" value="{{ image_conv.explanation }}" size="15" maxlength="64">
                         </div>
                         <div class="data_info"> {# image_conv.mutations #}
-                            <label>Accept suffix (s/es/'/'s)</label>
+                            <label>{{ translate("Accept suffix (s/es/'/'s)") }}</label>
                             <select name="image_mutations">
                                 {% if image_conv.mutations %}
-                                <option value="True" selected>Yes</option>
-                                <option value="False">No</option>
+                                <option value="True" selected>{{ translate('Yes') }}</option>
+                                <option value="False">{{ translate('No') }}</option>
                                 {% else %}
-                                <option value="True">Yes</option>
-                                <option value="False" selected>No</option>
+                                <option value="True">{{ translate('Yes') }}</option>
+                                <option value="False" selected>{{ translate('No') }}</option>
                                 {% endif %}
                             </select>
                         </div>
                         <div class="data_info"> {# replacement image uploads #}
-                            <label>Images</label>
+                            <label>{{ translate('Images') }}</label>
                             <input name="image_files_existing-{{ image_conv.id }}" type="file" accept="image/*" multiple>
                         </div>
                     </div>
@@ -490,7 +490,7 @@
                 {% endfor %}
                 <div class="row">
                     <div class="col">
-                        <button type="button" onclick="Add_image(this)" class="control_buttons">Add image insertion</button>
+                        <button type="button" onclick="Add_image(this)" class="control_buttons">{{ translate('Add image insertion') }}</button>
                     </div>
                 </div>
                 <hr class="new" />
@@ -499,62 +499,62 @@
                 <section class="rule-section">
                     <header class="rule-section-heading">
                         <div>
-                            <h2>Phrase replacements</h2>
-                            <p>Replace matching phrases while preserving document structure.</p>
+                            <h2>{{ translate('Phrase replacements') }}</h2>
+                            <p>{{ translate('Replace matching phrases while preserving document structure.') }}</p>
                         </div>
                     </header>
                     <div class="rule-list">
                 {% for phrase_conv in setting.phrase_convs %}
                 <div class="row">
                     <div class="col-2">
-                        <label class="data_heading">Phrase replacement</label>
-                        <button type="button" onclick="Delete_part(this)" class="control_buttons">Delete</button>
+                        <label class="data_heading">{{ translate('Phrase replacement') }}</label>
+                        <button type="button" onclick="Delete_part(this)" class="control_buttons">{{ translate('Delete') }}</button>
                     </div>
                     <div class="col"> {# information of text convertation #}
                         <div class="data_info"> {# phrase_conv.phrase_from #}
-                            <label>Change from</label>
+                            <label>{{ translate('Change from') }}</label>
                             <input name="phrase_from" class="slim_input" type="text" value="{{ phrase_conv.phrase_from }}" size="15" minlength="1" maxlength="64">
                         </div>
                         <div class="data_info"> {# phrase_conv.phrase_to #}
-                            <label>Change to</label>
+                            <label>{{ translate('Change to') }}</label>
                             <input name="phrase_to" class="slim_input" type="text" value="{{ phrase_conv.phrase_to }}" size="15" maxlength="64">
                         </div>
                         <div class="data_info"> {# phrase_conv.direct #}
-                            <label>Direct change</label>
+                            <label>{{ translate('Direct change') }}</label>
                             <select name="phrase_direct" onchange="Sync_phrase_regex(this)">
                                 {% if phrase_conv.direct %}
-                                <option value="True" selected>Yes</option>
-                                <option value="False">No</option>
+                                <option value="True" selected>{{ translate('Yes') }}</option>
+                                <option value="False">{{ translate('No') }}</option>
                                 {% else %}
-                                <option value="True">Yes</option>
-                                <option value="False" selected>No</option>
+                                <option value="True">{{ translate('Yes') }}</option>
+                                <option value="False" selected>{{ translate('No') }}</option>
                                 {% endif %}
                             </select>
                         </div>
                         <div class="data_info"> {# phrase_conv.mutations #}
-                            <label>Accept suffix (s/es/'/'s)</label>
+                            <label>{{ translate("Accept suffix (s/es/'/'s)") }}</label>
                             <select name="phrase_mutations">
                                 {% if phrase_conv.mutations %}
-                                <option value="True" selected>Yes</option>
-                                <option value="False">No</option>
+                                <option value="True" selected>{{ translate('Yes') }}</option>
+                                <option value="False">{{ translate('No') }}</option>
                                 {% else %}
-                                <option value="True">Yes</option>
-                                <option value="False" selected>No</option>
+                                <option value="True">{{ translate('Yes') }}</option>
+                                <option value="False" selected>{{ translate('No') }}</option>
                                 {% endif %}
                             </select>
                         </div>
                         <div class="data_info"> {# phrase_conv.regex #}
-                            <label>Regular expression</label>
+                            <label>{{ translate('Regular expression') }}</label>
                             <input type="hidden" name="phrase_regex" value="False" data-phrase-regex-fallback
                                    {% if phrase_conv.direct %}disabled{% endif %}>
                             <select name="phrase_regex" onchange="Sync_phrase_regex(this)"
                                     {% if not phrase_conv.direct %}disabled{% endif %}>
                                 {% if phrase_conv.direct and phrase_conv.regex %}
-                                <option value="True" selected>Yes</option>
-                                <option value="False">No</option>
+                                <option value="True" selected>{{ translate('Yes') }}</option>
+                                <option value="False">{{ translate('No') }}</option>
                                 {% else %}
-                                <option value="True">Yes</option>
-                                <option value="False" selected>No</option>
+                                <option value="True">{{ translate('Yes') }}</option>
+                                <option value="False" selected>{{ translate('No') }}</option>
                                 {% endif %}
                             </select>
                         </div>
@@ -564,7 +564,7 @@
                 {% endfor %}
                 <div class="row">
                     <div class="col">
-                        <button type="button" onclick="Add_text(this)" class="control_buttons">Add phrase replacement</button>
+                        <button type="button" onclick="Add_text(this)" class="control_buttons">{{ translate('Add phrase replacement') }}</button>
                     </div>
                 </div>
                 <hr class="new" />
@@ -574,32 +574,32 @@
                     <div class="file-upload-copy">
                         <span class="file-upload-icon"><i class="far fa-file-alt" aria-hidden="true"></i></span>
                         <div>
-                            <h2>Files to process</h2>
-                            <p><span data-file-selection>No files selected</span> · {{ allowed_extensions|join(', ')|upper }}</p>
+                            <h2>{{ translate('Files to process') }}</h2>
+                            <p><span data-file-selection>{{ translate('No files selected') }}</span> · {{ allowed_extensions|join(', ')|upper }}</p>
                         </div>
                     </div>
                     <label class="button file-picker" for="process-files">
                         <i class="fas fa-upload" aria-hidden="true"></i>
-                        Choose files
+                        {{ translate('Choose files') }}
                     </label>
                     <input id="process-files" class="native-file-input" onchange="Activate_run(this); Update_file_label(this)"
                            name="Process_files" type="file" accept="{{ '.' + allowed_extensions|join(', .') }}" multiple>
                 </section>
                 <footer class="editor-actions">
                     <div class="button-group">
-                        <button class="button" type="button" onclick="Close_setting('{{ url_for('my_settings') }}')">Close</button>
+                        <button class="button" type="button" onclick="Close_setting('{{ url_for('my_settings') }}')">{{ translate('Close') }}</button>
                         {% if setting.owner_id == user.id %}
-                        <button class="button" type="button" onclick="window.location.href='{{ url_for('setting', setting_id=setting.id) }}'">Reset</button>
+                        <button class="button" type="button" onclick="window.location.href='{{ url_for('setting', setting_id=setting.id) }}'">{{ translate('Reset') }}</button>
                     </div>
                     <div class="button-group">
-                        <input class="button" type="submit" name="save" value="Save">
-                        <input class="button button-primary" type="submit" name="save_run" id="RunS" value="Save and run{{ '' if (files_situation[0]==0 and files_situation[1]==0) else ' (disabled)' }}" disabled>
+                        <input class="button" type="submit" name="save" value="{{ translate('Save') }}">
+                        <input class="button button-primary" type="submit" name="save_run" id="RunS" data-job-blocked="{{ 'false' if (files_situation[0]==0 and files_situation[1]==0) else 'true' }}" value="{{ translate('Save and run') }}{{ '' if (files_situation[0]==0 and files_situation[1]==0) else translate(' (disabled)') }}" disabled>
                         {% else %}
                     </div>
                     <div class="button-group">
-                        <input class="button" type="submit" name="copy" value="Copy to my settings">
+                        <input class="button" type="submit" name="copy" value="{{ translate('Copy to my settings') }}">
                         {% endif %}
-                        <input class="button" type="submit" name="run" id="Run" value="Run{{ '' if (files_situation[0]==0 and files_situation[1]==0) else ' (disabled)' }}" disabled>
+                        <input class="button" type="submit" name="run" id="Run" data-job-blocked="{{ 'false' if (files_situation[0]==0 and files_situation[1]==0) else 'true' }}" value="{{ translate('Run') }}{{ '' if (files_situation[0]==0 and files_situation[1]==0) else translate(' (disabled)') }}" disabled>
                     </div>
                 </footer>
             </form>
