@@ -23,13 +23,17 @@ from text_evolver.db.models import (
 from text_evolver.image_storage import ImageStorageChanges
 from text_evolver.services import (
     _acquire_create_job_lock,
-    _calculate_row_changes,
     _lock_setting_for_job,
     copy_setting,
-    lock_setting_jobs_for_deletion,
-    update_setting_from_form,
+    parse_setting_form,
 )
+from text_evolver.web.routines.settings import _calculate_row_changes, update_setting
 from text_evolver.web.validation_utils import ValidationError, validate_image_upload_size
+
+
+async def apply_setting_form(session, setting_id, form, storage, changes):
+    data = parse_setting_form(form)
+    update_setting(session, setting_id, data, storage, changes)
 
 
 class TrackingUploadFile(UploadFile):
@@ -78,7 +82,7 @@ def test_unknown_upload_size_is_rejected_before_content_is_read():
 
 
 @pytest.mark.parametrize("case", ["empty-upload", "missing-stored-images", "large-stored-images"])
-def test_image_integrity_is_preserved_without_stored_size_limit(database, app_settings, image_storage, case):
+def test_invalid_images_are_rejected_before_storage(database, image_storage, case):
     with Session(database) as session:
         owner = UserAccount(id=uuid4(), username="image-validation")
         session.add(owner)
@@ -108,13 +112,14 @@ def test_image_integrity_is_preserved_without_stored_size_limit(database, app_se
             fields.append((f"image_files_{token}", TrackingUploadFile(b"", "empty.png")))
         form = FormData(fields)
         changes = ImageStorageChanges(image_storage)
-        operation = update_setting_from_form(session, setting.id, form, app_settings, image_storage, changes)
-        if case == "large-stored-images":
+        operation = apply_setting_form(session, setting.id, form, image_storage, changes)
+        message = {
+            "empty-upload": "is empty",
+            "missing-stored-images": "no stored images",
+            "large-stored-images": "total at most",
+        }[case]
+        with pytest.raises(ValidationError, match=message):
             asyncio.run(operation)
-        else:
-            message = "is empty" if case == "empty-upload" else "no stored images"
-            with pytest.raises(ValidationError, match=message):
-                asyncio.run(operation)
         assert image_storage.objects == {}
 
 
@@ -137,7 +142,9 @@ def test_create_job_uses_postgresql_transaction_lock_for_user():
 
 def test_lock_setting_for_job_uses_for_share_nowait():
     statements = []
-    session = SimpleNamespace(scalar=lambda statement: statements.append(statement) or 42)
+    session = SimpleNamespace(
+        scalar=lambda statement: statements.append(statement) or SimpleNamespace(deletion_requested=False),
+    )
 
     _lock_setting_for_job(session, setting_id=42)
 
@@ -167,18 +174,6 @@ def test_lock_setting_for_job_rejects_locked_setting():
         _lock_setting_for_job(session, setting_id=42)
 
 
-def test_lock_setting_jobs_for_deletion_uses_for_update():
-    statements = []
-    session = SimpleNamespace(scalars=lambda statement: statements.append(statement) or ())
-
-    assert lock_setting_jobs_for_deletion(session, setting_id=42) == []
-
-    assert len(statements) == 1
-    sql = str(statements[0].compile(dialect=postgresql.dialect()))
-    assert "WHERE processing_job.setting_id =" in sql
-    assert sql.endswith("FOR UPDATE")
-
-
 @pytest.mark.parametrize("job_status", ["queued", "running"])
 def test_update_setting_rejects_setting_used_by_active_job(
     database,
@@ -186,7 +181,7 @@ def test_update_setting_rejects_setting_used_by_active_job(
     job_status: str,
 ):
     with Session(database) as session:
-        user = UserAccount(username=f"owner-{job_status}")
+        user = UserAccount(id=uuid4(), username=f"owner-{job_status}")
         session.add(user)
         session.flush()
         setting = Setting(owner_id=user.id, name="Original")
@@ -207,7 +202,7 @@ def test_update_setting_rejects_setting_used_by_active_job(
 
         with pytest.raises(ValidationError, match="while its job is queued or running"):
             asyncio.run(
-                update_setting_from_form(
+                apply_setting_form(
                     session,
                     setting.id,
                     form,
@@ -221,7 +216,7 @@ def test_update_setting_rejects_setting_used_by_active_job(
 
 def test_update_setting_preserves_unchanged_rows(database, image_storage):
     with Session(database) as session:
-        user = UserAccount(username="owner")
+        user = UserAccount(id=uuid4(), username="owner")
         session.add(user)
         session.flush()
         setting = Setting(owner_id=user.id, name="Conversions")
@@ -352,7 +347,7 @@ def test_update_setting_preserves_unchanged_rows(database, image_storage):
 
         storage_changes = ImageStorageChanges(image_storage)
         asyncio.run(
-            update_setting_from_form(
+            apply_setting_form(
                 session,
                 setting_id,
                 form,
@@ -411,8 +406,8 @@ def test_update_setting_preserves_unchanged_rows(database, image_storage):
 
 def test_copy_setting_copies_image_objects_to_independent_keys(database, image_storage):
     with Session(database) as session:
-        owner = UserAccount(username="source-owner")
-        copier = UserAccount(username="copier")
+        owner = UserAccount(id=uuid4(), username="source-owner")
+        copier = UserAccount(id=uuid4(), username="copier")
         session.add_all((owner, copier))
         session.flush()
         source = Setting(owner_id=owner.id, name="Public", public=True)
@@ -457,7 +452,7 @@ def test_copy_setting_copies_image_objects_to_independent_keys(database, image_s
 
 def test_new_image_object_is_deleted_when_database_rolls_back(database, image_storage):
     with Session(database) as session:
-        owner = UserAccount(username="rollback-owner")
+        owner = UserAccount(id=uuid4(), username="rollback-owner")
         session.add(owner)
         session.flush()
         setting = Setting(owner_id=owner.id, name="Rollback")
@@ -483,7 +478,7 @@ def test_new_image_object_is_deleted_when_database_rolls_back(database, image_st
         storage_changes = ImageStorageChanges(image_storage)
 
         asyncio.run(
-            update_setting_from_form(
+            apply_setting_form(
                 session,
                 setting.id,
                 form,
@@ -502,7 +497,7 @@ def test_new_image_object_is_deleted_when_database_rolls_back(database, image_st
 
 def test_removing_image_conversion_deletes_its_object_after_commit(database, image_storage):
     with Session(database) as session:
-        owner = UserAccount(username="remove-owner")
+        owner = UserAccount(id=uuid4(), username="remove-owner")
         session.add(owner)
         session.flush()
         setting = Setting(owner_id=owner.id, name="Remove")
@@ -541,7 +536,7 @@ def test_removing_image_conversion_deletes_its_object_after_commit(database, ima
         storage_changes = ImageStorageChanges(image_storage)
 
         asyncio.run(
-            update_setting_from_form(
+            apply_setting_form(
                 session,
                 setting.id,
                 form,
@@ -559,7 +554,7 @@ def test_removing_image_conversion_deletes_its_object_after_commit(database, ima
 
 def test_update_setting_rejects_invalid_phrase_regex(database, image_storage):
     with Session(database) as session:
-        user = UserAccount(username="owner")
+        user = UserAccount(id=uuid4(), username="owner")
         session.add(user)
         session.flush()
         setting = Setting(owner_id=user.id, name="Conversions")
@@ -583,7 +578,7 @@ def test_update_setting_rejects_invalid_phrase_regex(database, image_storage):
 
         with pytest.raises(ValidationError, match="Invalid phrase regular expression"):
             asyncio.run(
-                update_setting_from_form(
+                apply_setting_form(
                     session,
                     setting.id,
                     form,
@@ -595,7 +590,7 @@ def test_update_setting_rejects_invalid_phrase_regex(database, image_storage):
 
 def test_update_setting_forces_regex_false_for_non_direct_phrase(database, image_storage):
     with Session(database) as session:
-        user = UserAccount(username="owner")
+        user = UserAccount(id=uuid4(), username="owner")
         session.add(user)
         session.flush()
         setting = Setting(owner_id=user.id, name="Conversions")
@@ -618,7 +613,7 @@ def test_update_setting_forces_regex_false_for_non_direct_phrase(database, image
         )
 
         asyncio.run(
-            update_setting_from_form(
+            apply_setting_form(
                 session,
                 setting.id,
                 form,
@@ -706,7 +701,7 @@ def test_update_setting_rejects_overlong_text_fields(
     message: str,
 ):
     with Session(database) as session:
-        owner = UserAccount(username=f"length-{field_name}")
+        owner = UserAccount(id=uuid4(), username=f"length-{field_name}")
         session.add(owner)
         session.flush()
         setting = Setting(owner_id=owner.id, name="Conversions")
@@ -716,10 +711,12 @@ def test_update_setting_rejects_overlong_text_fields(
 
         with pytest.raises(ValidationError, match=message):
             asyncio.run(
-                update_setting_from_form(
+                apply_setting_form(
                     session,
                     setting.id,
-                    _setting_form_for_length_case(field_name, "x" * 65),
+                    _setting_form_for_length_case(
+                        field_name, "x" * (129 if field_name in {"unit_from", "phrase_from", "image_phrase"} else 65),
+                    ),
                     image_storage,
                     changes,
                 )
@@ -730,7 +727,7 @@ def test_update_setting_rejects_overlong_text_fields(
 
 def test_update_setting_accepts_text_at_the_explicit_limit(database, image_storage):
     with Session(database) as session:
-        owner = UserAccount(username="length-boundary")
+        owner = UserAccount(id=uuid4(), username="length-boundary")
         session.add(owner)
         session.flush()
         setting = Setting(owner_id=owner.id, name="Conversions")
@@ -738,7 +735,7 @@ def test_update_setting_accepts_text_at_the_explicit_limit(database, image_stora
         session.commit()
 
         asyncio.run(
-            update_setting_from_form(
+            apply_setting_form(
                 session,
                 setting.id,
                 _setting_form_for_length_case("set_name", "x" * 64),

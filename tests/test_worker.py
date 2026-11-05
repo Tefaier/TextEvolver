@@ -2,6 +2,7 @@ import datetime as dt
 import threading
 from contextlib import contextmanager
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import select
@@ -73,6 +74,7 @@ def test_worker_cleans_expired_or_revoked_sessions_and_their_flows_and_flashes(m
     [
         ("run_login_failure_cleanup", "cleanup_expired_login_failures", "LOGIN_FAILURE_CLEANUP_SECONDS"),
         ("run_session_cleanup", "cleanup_expired_sessions", "SESSION_CLEANUP_SECONDS"),
+        ("run_setting_cleanup", "cleanup_pending_settings", "SETTING_CLEANUP_SECONDS"),
     ],
 )
 def test_cleanup_loop_retries_after_failure_and_stops(monkeypatch, caplog, runner, cleanup, interval):
@@ -111,7 +113,7 @@ def install_worker_database(monkeypatch, database, app_settings):
 
 def create_queued_job(database) -> int:
     with Session(database) as session:
-        user = UserAccount(username="worker-user")
+        user = UserAccount(id=uuid4(), username="worker-user")
         session.add(user)
         session.flush()
         setting = Setting(owner_id=user.id, name="worker-setting")
@@ -149,7 +151,7 @@ def test_worker_claims_and_completes_a_document(monkeypatch, database, app_setti
 
 def create_job_with_image(database, object_key: str) -> int:
     with Session(database) as session:
-        user = UserAccount(username=f"image-worker-{object_key}")
+        user = UserAccount(id=uuid4(), username=f"image-worker-{object_key}")
         session.add(user)
         session.flush()
         setting = Setting(owner_id=user.id, name="image-setting")
@@ -307,7 +309,7 @@ def test_worker_pool_runs_configured_jobs_in_parallel(monkeypatch, app_settings)
     stopping = threading.Event()
     jobs = [worker.ClaimedJob(id=value, setting_id=value) for value in range(1, 4)]
     lock = threading.Lock()
-    barrier = threading.Barrier(settings.worker_concurrency + 2)
+    barrier = threading.Barrier(settings.worker_concurrency + 3)
     processed: dict[int, str] = {}
     cleanup_threads: dict[str, str] = {}
 
@@ -330,6 +332,12 @@ def test_worker_pool_runs_configured_jobs_in_parallel(monkeypatch, app_settings)
         cleanup_threads["sessions"] = threading.current_thread().name
         barrier.wait(timeout=5)
 
+    def clean_settings():
+        cleanup_threads["settings"] = threading.current_thread().name
+        barrier.wait(timeout=5)
+        return 0
+
+    monkeypatch.setattr(worker, "cleanup_pending_settings", clean_settings)
     monkeypatch.setattr(worker, "claim_job", claim_job)
     monkeypatch.setattr(worker, "run_claimed_job", run_claimed_job)
     monkeypatch.setattr(worker, "cleanup_expired_login_failures", clean_login_failures)
@@ -339,5 +347,71 @@ def test_worker_pool_runs_configured_jobs_in_parallel(monkeypatch, app_settings)
 
     assert set(processed) == {1, 2, 3}
     assert len(set(processed.values())) == settings.worker_concurrency
-    assert set(cleanup_threads) == {"login", "sessions"}
-    assert len(set(processed.values()) | set(cleanup_threads.values())) == settings.worker_concurrency + 2
+    assert set(cleanup_threads) == {"login", "sessions", "settings"}
+    assert len(set(processed.values()) | set(cleanup_threads.values())) == settings.worker_concurrency + 3
+
+
+def test_setting_deletion_retries_image_cleanup_after_storage_failure(
+    database, image_storage, worker_database, monkeypatch,
+):
+    from text_evolver.db.models import SettingImageDeletion
+    from text_evolver.image_storage import ImageStorageError
+
+    with Session(database) as db:
+        owner = UserAccount(id=uuid4(), username="delete-retry")
+        db.add(owner)
+        db.flush()
+        setting = Setting(owner_id=owner.id, name="Delete", deletion_requested=True)
+        db.add(setting)
+        db.flush()
+        conversion = ImageConversion(setting_id=setting.id, phrase="trigger", explanation="")
+        db.add(conversion)
+        db.flush()
+        db.add(ImageConversionFile(image_conversion_id=conversion.id, object_key="retry", size_bytes=5, position=0))
+        db.commit()
+        setting_id = setting.id
+    image_storage.objects["retry"] = b"image"
+    real_delete = image_storage.delete
+
+    def fail_delete(keys):
+        with Session(database) as db:
+            # The deletion and durable cleanup request committed before the storage call.
+            assert db.get(Setting, setting_id) is None
+            assert db.get(SettingImageDeletion, "retry") is not None
+        raise ImageStorageError("Temporary storage failure")
+
+    monkeypatch.setattr(image_storage, "delete", fail_delete)
+    with pytest.raises(ImageStorageError, match="Temporary storage failure"):
+        worker.cleanup_pending_settings(image_storage)
+    monkeypatch.setattr(image_storage, "delete", real_delete)
+    assert worker.cleanup_pending_settings(image_storage) == 0
+    assert "retry" not in image_storage.objects
+    with Session(database) as db:
+        assert db.get(SettingImageDeletion, "retry") is None
+
+
+def test_setting_deletion_waits_for_jobs_of_every_user(database, image_storage, worker_database):
+    with Session(database) as db:
+        owner = UserAccount(id=uuid4(), username="delete-owner")
+        other = UserAccount(id=uuid4(), username="delete-other")
+        db.add_all([owner, other])
+        db.flush()
+        setting = Setting(owner_id=owner.id, name="Shared", public=True, deletion_requested=True)
+        db.add(setting)
+        db.flush()
+        jobs = [
+            ProcessingJob(user_id=owner.id, setting_id=setting.id, status="queued"),
+            ProcessingJob(user_id=other.id, setting_id=setting.id, status="running"),
+        ]
+        db.add_all(jobs)
+        db.commit()
+        setting_id = setting.id
+        assert worker.cleanup_pending_settings(image_storage) == 0
+        jobs[0].status = "completed"
+        db.commit()
+        assert worker.cleanup_pending_settings(image_storage) == 0
+        jobs[1].status = "failed"
+        db.commit()
+        assert worker.cleanup_pending_settings(image_storage) == 1
+        db.expire_all()
+        assert db.get(Setting, setting_id) is None

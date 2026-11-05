@@ -14,19 +14,28 @@ import psutil
 from sqlalchemy import delete, or_, select, update
 
 from text_evolver.config import AppSettings, get_application_settings
-from text_evolver.db.models import AuthFlow, BrowserSession, LoginFailure, LoginFailureByAccount, ProcessingJob
+from text_evolver.db.models import (
+    AuthFlow,
+    BrowserSession,
+    LoginFailure,
+    LoginFailureByAccount,
+    ProcessingJob,
+    Setting,
+    SettingImageDeletion,
+)
 from text_evolver.db.session import session_scope
 from text_evolver.image_storage import ImageStorage, get_image_storage
 from text_evolver.processing.pokemon_cache import refresh_pokemon_cache
 from text_evolver.processing.process_config_builder import ProcessingConfiguration, load_processing_configuration
 from text_evolver.processing.processor import process_files
-from text_evolver.services import job_paths
+from text_evolver.services import ACTIVE_JOB_STATUSES, job_paths, setting_image_object_keys
 
 LOGGER = logging.getLogger("text_evolver.worker")
 PROCESS_CONTEXT = multiprocessing.get_context("spawn")
 LOGIN_FAILURE_RETENTION = dt.timedelta(hours=1)
 LOGIN_FAILURE_CLEANUP_SECONDS = 60
 SESSION_CLEANUP_SECONDS = 60
+SETTING_CLEANUP_SECONDS = 2
 
 
 @dataclass(frozen=True)
@@ -97,6 +106,52 @@ def run_session_cleanup(stopping: threading.Event) -> None:
         except Exception:
             LOGGER.exception("Could not clean expired or revoked sessions and expired authentication flows")
         stopping.wait(SESSION_CLEANUP_SECONDS)
+
+
+def cleanup_pending_settings(image_storage: ImageStorage | None = None) -> int:
+    """Delete requested settings only after every referencing job is terminal.
+
+    Completed jobs keep their output and become detached through ON DELETE SET NULL,
+    so users can still download their documents after a setting disappears.
+    """
+    image_storage = image_storage or get_image_storage()
+    count = 0
+    with session_scope() as session:
+        active_jobs = select(ProcessingJob.id).where(
+            ProcessingJob.setting_id == Setting.id,
+            ProcessingJob.status.in_(ACTIVE_JOB_STATUSES),
+        ).exists()
+        settings = list(session.scalars(
+            select(Setting)
+            .where(Setting.deletion_requested.is_(True), ~active_jobs)
+            .order_by(Setting.id)
+            .with_for_update(skip_locked=True)
+            .limit(100)
+        ))
+        for setting in settings:
+            for object_key in setting_image_object_keys(session, setting.id):
+                session.add(SettingImageDeletion(object_key=object_key))
+            # Use database cascades, including detaching completed processing jobs.
+            session.execute(delete(Setting).where(Setting.id == setting.id))
+            count += 1
+    # Queue rows survive storage outages and process restarts. Delete their objects
+    # only after the setting transaction commits, then acknowledge successful cleanup.
+    with session_scope() as session:
+        keys = list(session.scalars(select(SettingImageDeletion.object_key).limit(1000)))
+    if keys:
+        image_storage.delete(keys)
+        with session_scope() as session:
+            session.execute(delete(SettingImageDeletion).where(SettingImageDeletion.object_key.in_(keys)))
+    return count
+
+
+def run_setting_cleanup(stopping: threading.Event) -> None:
+    while not stopping.is_set():
+        try:
+            cleanup_pending_settings()
+        except Exception:
+            LOGGER.exception("Could not delete pending settings")
+        stopping.wait(SETTING_CLEANUP_SECONDS)
 
 
 def claim_job() -> ClaimedJob | None:
@@ -242,7 +297,7 @@ def run_worker_slot(slot: int, settings: AppSettings, stopping: threading.Event)
 
 def run_worker_pool(settings: AppSettings, stopping: threading.Event) -> None:
     with ThreadPoolExecutor(
-        max_workers=settings.worker_concurrency + 2,
+        max_workers=settings.worker_concurrency + 3,
         thread_name_prefix="text-evolver-worker",
     ) as executor:
         slot_futures = [
@@ -251,7 +306,8 @@ def run_worker_pool(settings: AppSettings, stopping: threading.Event) -> None:
         ]
         login_cleanup_future = executor.submit(run_login_failure_cleanup, stopping)
         session_cleanup_future = executor.submit(run_session_cleanup, stopping)
-        futures = [*slot_futures, login_cleanup_future, session_cleanup_future]
+        setting_cleanup_future = executor.submit(run_setting_cleanup, stopping)
+        futures = [*slot_futures, login_cleanup_future, session_cleanup_future, setting_cleanup_future]
         try:
             while not stopping.wait(1):
                 for future in futures:

@@ -1,5 +1,6 @@
 """Fixed validation rules for submitted values, independent of requests and databases."""
 
+import math
 import re
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,10 @@ from text_evolver.web.i18n import LANGUAGES, translate
 TRUTHY = {"true", "1", "yes", "on"}
 FALSY = {"false", "0", "no", "off"}
 SETTING_TEXT_MAX_LENGTH = 64
+MATCHER_MAX_LENGTH = 128
+SETTING_ELEMENT_LIMIT = 100
+SETTING_IMAGES_MAX_BYTES = 512 * 1024 * 1024
+PASSKEY_LIMIT = 3
 PASSWORD_MIN_LENGTH = 12
 PASSWORD_MAX_LENGTH = 128
 IMAGE_ROW_TOKEN_PATTERN = re.compile(r"[a-zA-Z0-9_-]{1,80}")
@@ -158,3 +163,46 @@ def validate_upload_filename(filename: str | None, used_names: set[str]) -> str:
     if not name or name in used_names:
         raise ValidationError(translate("Uploaded filenames must be unique"))
     return name
+
+
+def validate_matcher(value: Any, field_name: str, *, strip: bool = False) -> str:
+    matcher = str(value)
+    if strip:
+        matcher = matcher.strip()
+    if len(matcher) > MATCHER_MAX_LENGTH:
+        raise ValidationError(translate(
+            "%(value0)s must contain at most %(value1)s characters",
+            value0=field_name, value1=MATCHER_MAX_LENGTH,
+        ))
+    return matcher
+
+
+def validate_setting_element_count(count: int) -> None:
+    if count > SETTING_ELEMENT_LIMIT:
+        raise ValidationError(translate(
+            "A setting can contain at most %(value0)s elements in total", value0=SETTING_ELEMENT_LIMIT,
+        ))
+
+
+def validate_setting_image_size(size: int) -> None:
+    if size > SETTING_IMAGES_MAX_BYTES:
+        raise ValidationError(translate(
+            "Setting images must total at most %(value0)s MiB", value0=SETTING_IMAGES_MAX_BYTES // (1024 * 1024),
+        ))
+
+
+def parse_setting_separation(value: Any) -> int:
+    try:
+        return max(1, int(value))
+    except (ValueError, TypeError, OverflowError):
+        raise ValidationError(translate("Invalid image separation")) from None
+
+
+def parse_setting_conversion(value: Any) -> float:
+    try:
+        conversion = float(value)
+    except (ValueError, TypeError, OverflowError):
+        raise ValidationError(translate("Invalid unit conversion multiplier")) from None
+    if not math.isfinite(conversion):
+        raise ValidationError(translate("Invalid unit conversion multiplier"))
+    return conversion

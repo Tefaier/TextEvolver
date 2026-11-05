@@ -19,6 +19,7 @@ CREATE TABLE setting (
     clean_empty BOOLEAN NOT NULL DEFAULT FALSE,
     convert_to_utf BOOLEAN NOT NULL DEFAULT FALSE,
     use_comma_separator BOOLEAN NOT NULL DEFAULT FALSE,
+    deletion_requested BOOLEAN NOT NULL DEFAULT FALSE,
     expect_feet BOOLEAN NOT NULL DEFAULT FALSE
 );
 CREATE INDEX ix_setting_owner_id ON setting(owner_id);
@@ -79,10 +80,14 @@ CREATE TABLE image_conversion_file (
     CONSTRAINT uq_image_conversion_file_position UNIQUE (image_conversion_id, position)
 );
 
+CREATE TABLE setting_image_deletion (
+    object_key TEXT NOT NULL PRIMARY KEY
+);
+
 CREATE TABLE processing_job (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     user_id TEXT NOT NULL REFERENCES user_account(id) ON DELETE CASCADE,
-    setting_id INTEGER NOT NULL REFERENCES setting(id) ON DELETE RESTRICT,
+    setting_id INTEGER REFERENCES setting(id) ON DELETE SET NULL,
     status TEXT NOT NULL DEFAULT 'queued'
         CHECK (status = 'queued' OR status = 'running' OR status = 'completed' OR status = 'failed' OR status = 'cancelled'),
     cancellation_requested BOOLEAN NOT NULL DEFAULT FALSE,

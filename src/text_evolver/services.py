@@ -30,10 +30,15 @@ from text_evolver.web.validation_utils import (
     ValidationError,
     is_supported_document_filename,
     parse_bool,
+    parse_setting_conversion,
+    parse_setting_separation,
     validate_image_row_token,
     validate_image_upload_size,
+    validate_matcher,
     validate_phrase_regex,
     validate_repeated_fields,
+    validate_setting_element_count,
+    validate_setting_image_size,
     validate_setting_text,
     validate_upload_filename,
 )
@@ -54,6 +59,7 @@ class SettingData:
     convert_to_utf: bool
     use_comma_separator: bool
     expect_feet: bool
+    deletion_requested: bool = False
     owner_name: str = ""
     fandoms: list[Fandom] = field(default_factory=list)
     unit_convs: list[UnitConversion] = field(default_factory=list)
@@ -83,6 +89,7 @@ def setting_data(session: Session, setting: Setting) -> SettingData:
         convert_to_utf=setting.convert_to_utf,
         use_comma_separator=setting.use_comma_separator,
         expect_feet=setting.expect_feet,
+        deletion_requested=setting.deletion_requested,
         owner_name=owner_name,
         fandoms=list(session.scalars(select(Fandom).where(Fandom.setting_id == setting.id).order_by(Fandom.id))),
         unit_convs=list(
@@ -119,10 +126,6 @@ def latest_job(session: Session, user_id: UUID) -> ProcessingJob | None:
     )
 
 
-def lock_setting_jobs_for_deletion(session: Session, setting_id: int) -> list[ProcessingJob]:
-    return list(session.scalars(select(ProcessingJob).where(ProcessingJob.setting_id == setting_id).with_for_update()))
-
-
 def user_view(session: Session, user: UserAccount) -> UserView:
     job = latest_job(session, user.id)
     waits = job is not None and job.status == "queued"
@@ -145,10 +148,26 @@ def copy_setting(
     storage: ImageStorage,
     storage_changes: ImageStorageChanges,
 ) -> Setting:
-    session.scalar(select(Setting.id).where(Setting.id == source_id).with_for_update(read=True))
+    locked_source = session.scalar(
+        select(Setting).where(Setting.id == source_id).with_for_update(read=True)
+        .execution_options(populate_existing=True)
+    )
+    if locked_source is None:
+        raise ValidationError(translate("Setting not found"))
+    ensure_setting_available(locked_source)
     source = get_setting(session, source_id)
     if source is None:
         raise ValidationError(translate("Setting not found"))
+    validate_setting_element_count(sum(len(rows) for rows in
+                                       (source.fandoms, source.unit_convs, source.phrase_convs, source.image_convs)))
+    for unit in source.unit_convs:
+        validate_matcher(unit.phrase_from, translate("Unit source phrase"))
+    for phrase in source.phrase_convs:
+        validate_matcher(phrase.phrase_from, translate("Phrase source"))
+    for image in source.image_convs:
+        validate_matcher(image.phrase, translate("Image trigger phrase"))
+    source_files = _image_files_by_conversion(session, source_id)
+    validate_setting_image_size(sum(image.size_bytes for files in source_files.values() for image in files))
     copied = Setting(
         owner_id=user_id,
         name=source.name,
@@ -198,7 +217,6 @@ def copy_setting(
             for value in source.phrase_convs
         ]
     )
-    source_files = _image_files_by_conversion(session, source_id)
     for value in source.image_convs:
         copied_conversion = ImageConversion(
             setting_id=copied.id,
@@ -228,7 +246,11 @@ def copy_setting(
 
 
 def search_settings(session: Session, user_id: UUID, phrase: str, page: int, page_size: int) -> dict[str, Any]:
-    predicate = (Setting.public.is_(True) | (Setting.owner_id == user_id)) & Setting.name.ilike(f"%{phrase}%")
+    predicate = (
+        Setting.deletion_requested.is_(False)
+        & (Setting.public.is_(True) | (Setting.owner_id == user_id))
+        & Setting.name.ilike(f"%{phrase}%")
+    )
     found = session.scalar(select(func.count()).select_from(Setting).where(predicate)) or 0
     pages = max(1, (found + page_size - 1) // page_size)
     page = min(max(page, 1), pages)
@@ -262,13 +284,6 @@ def _aligned(form: Any, keys: list[str]) -> list[list[Any]]:
 
 
 @dataclass(frozen=True)
-class RowChanges:
-    preserved: tuple[Any, ...]
-    removed: tuple[Any, ...]
-    added: tuple[dict[str, Any], ...]
-
-
-@dataclass(frozen=True)
 class ImageSubmission:
     phrase: str
     separation: int
@@ -278,35 +293,7 @@ class ImageSubmission:
     uploads: tuple[UploadFile, ...]
 
 
-def _calculate_row_changes(existing: list[Any], submitted: list[dict[str, Any]], fields: tuple[str, ...]) -> RowChanges:
-    """Compare complete row values without attempting to pair edits with existing rows."""
-    unmatched = list(existing)
-    preserved: list[Any] = []
-    added: list[dict[str, Any]] = []
-    for values in submitted:
-        submitted_key = tuple(values[field] for field in fields)
-        match_index = next(
-            (
-                index
-                for index, row in enumerate(unmatched)
-                if tuple(getattr(row, field) for field in fields) == submitted_key
-            ),
-            None,
-        )
-        if match_index is None:
-            added.append(values)
-        else:
-            preserved.append(unmatched.pop(match_index))
-    return RowChanges(tuple(preserved), tuple(unmatched), tuple(added))
-
-
-def _apply_relation_changes(session: Session, setting_id: int, model: type[Any], changes: RowChanges) -> None:
-    for row in changes.removed:
-        session.delete(row)
-    session.add_all(model(setting_id=setting_id, **values) for values in changes.added)
-
-
-def _parse_image_submissions(form: Any, existing_by_token: dict[str, ImageConversion]) -> list[ImageSubmission]:
+def _parse_image_submissions(form: Any) -> list[ImageSubmission]:
     field_values = _aligned(
         form, ["image_token", "image_phrase", "image_separation", "image_expl", "image_mutations"]
     )
@@ -318,7 +305,7 @@ def _parse_image_submissions(form: Any, existing_by_token: dict[str, ImageConver
     submissions: list[ImageSubmission] = []
     used_tokens: set[str] = set()
     for index, submitted_phrase in enumerate(phrases):
-        phrase = validate_setting_text(submitted_phrase, translate("Image trigger phrase"), strip=True)
+        phrase = validate_matcher(submitted_phrase, translate("Image trigger phrase"), strip=True)
         if not phrase:
             continue
         token = str(tokens[index])
@@ -329,16 +316,23 @@ def _parse_image_submissions(form: Any, existing_by_token: dict[str, ImageConver
             for value in _values(form, IMAGE_UPLOAD_FIELD_PREFIX + token)
             if isinstance(value, UploadFile) and value.filename
         )
-        existing = existing_by_token.get(token)
-        if not uploads and existing is None:
+        existing_id = None
+        if token.startswith("existing-"):
+            try:
+                existing_id = int(token.removeprefix("existing-"))
+            except ValueError:
+                raise ValidationError(translate("Image conversion row identifier is invalid")) from None
+            if existing_id <= 0 or token != f"existing-{existing_id}":
+                raise ValidationError(translate("Image conversion row identifier is invalid"))
+        if not uploads and existing_id is None:
             raise ValidationError(translate("Image conversion '%(value0)s' requires an image", value0=phrase))
         submissions.append(
             ImageSubmission(
                 phrase=phrase,
-                separation=max(1, int(separations[index])),
+                separation=parse_setting_separation(separations[index]),
                 explanation=validate_setting_text(explanations[index], translate("Image explanation")),
                 mutations=parse_bool(image_mutations[index], "image_mutations"),
-                existing_conversion_id=existing.id if existing is not None else None,
+                existing_conversion_id=existing_id,
                 uploads=uploads,
             )
         )
@@ -368,79 +362,25 @@ def setting_image_object_keys(session: Session, setting_id: int) -> tuple[str, .
     )
 
 
-def _upload_conversion_files(
-    session: Session,
-    setting: Setting,
-    conversion: ImageConversion,
-    uploads: tuple[UploadFile, ...],
-    storage: ImageStorage,
-    storage_changes: ImageStorageChanges,
-) -> None:
-    for position, upload in enumerate(uploads):
-        object_key = storage.object_key(setting.owner_id, setting.id, upload.filename)
-        try:
-            storage.upload(upload.file, object_key)
-        except ImageStorageError as exc:
-            raise ValidationError(translate("Unable to store setting images")) from exc
-        storage_changes.created_object(object_key)
-        session.add(
-            ImageConversionFile(
-                image_conversion_id=conversion.id,
-                object_key=object_key,
-                size_bytes=validate_image_upload_size(upload.size, upload.filename),
-                position=position,
-            )
-        )
+@dataclass(frozen=True)
+class SettingSubmission:
+    name: str
+    public: bool
+    clean_empty: bool
+    convert_to_utf: bool
+    use_comma_separator: bool
+    expect_feet: bool
+    fandoms: list[dict[str, Any]]
+    units: list[dict[str, Any]]
+    phrases: list[dict[str, Any]]
+    images: list[ImageSubmission]
 
 
-async def update_setting_from_form(
-    session: Session,
-    setting_id: int,
-    form: Any,
-    storage: ImageStorage,
-    storage_changes: ImageStorageChanges,
-) -> None:
-    setting = session.get(Setting, setting_id, with_for_update=True)
-    if setting is None:
-        raise ValidationError(translate("Setting not found"))
-    active_job_id = session.scalar(
-        select(ProcessingJob.id)
-        .where(
-            ProcessingJob.setting_id == setting_id,
-            ProcessingJob.status.in_(ACTIVE_JOB_STATUSES),
-        )
-        .limit(1)
-    )
-    if active_job_id is not None:
-        raise ValidationError(translate("Cannot update a setting while its job is queued or running"))
+def parse_setting_form(form: Any) -> SettingSubmission:
+    """Parse and validate submitted values before passing data to persistence routines."""
+    validate_setting_element_count(sum(len(form.getlist(key)) for key in
+                                       ("fandom", "unit_from", "phrase_from", "image_phrase")))
     name = validate_setting_text(form.get("set_name", ""), translate("Setting name"), strip=True, required=True)
-
-    setting.name = name
-    setting.public = parse_bool(form.get("set_public"), "set_public")
-    setting.clean_empty = parse_bool(form.get("set_empty"), "set_empty")
-    setting.convert_to_utf = parse_bool(form.get("set_utf"), "set_utf")
-    setting.use_comma_separator = parse_bool(form.get("set_coma_sep"), "set_coma_sep")
-    setting.expect_feet = parse_bool(form.get("set_expect_feet"), "set_expect_feet")
-
-    existing_fandoms = list(session.scalars(select(Fandom).where(Fandom.setting_id == setting_id).order_by(Fandom.id)))
-    existing_units = list(
-        session.scalars(
-            select(UnitConversion).where(UnitConversion.setting_id == setting_id).order_by(UnitConversion.id)
-        )
-    )
-    existing_phrases = list(
-        session.scalars(
-            select(PhraseConversion).where(PhraseConversion.setting_id == setting_id).order_by(PhraseConversion.id)
-        )
-    )
-    existing_images = list(
-        session.scalars(
-            select(ImageConversion).where(ImageConversion.setting_id == setting_id).order_by(ImageConversion.id)
-        )
-    )
-    existing_images_by_token = {f"existing-{value.id}": value for value in existing_images}
-    files_by_conversion = _image_files_by_conversion(session, setting_id)
-
     field_values = _aligned(
         form, ["fandom", "fandom_active", "fandom_separation", "fandom_value_1", "fandom_value_2"]
     )
@@ -455,7 +395,7 @@ async def update_setting_from_form(
             {
                 "name": validate_setting_text(fandom_name, translate("Fandom name"), required=True),
                 "active": parse_bool(active[index], "fandom_active"),
-                "separation": max(1, int(separation[index])),
+                "separation": parse_setting_separation(separation[index]),
                 "support_value_1": parse_bool(value_1[index], "fandom_value_1"),
                 "support_value_2": parse_bool(value_2[index], "fandom_value_2"),
             }
@@ -468,13 +408,13 @@ async def update_setting_from_form(
     can_be_word = field_values[3]
     submitted_units: list[dict[str, Any]] = []
     for index, phrase_from in enumerate(unit_from):
-        phrase_from = validate_setting_text(phrase_from, translate("Unit source phrase"), strip=True)
+        phrase_from = validate_matcher(phrase_from, translate("Unit source phrase"), strip=True)
         if phrase_from:
             submitted_units.append(
                 {
                     "phrase_from": phrase_from,
                     "phrase_to": validate_setting_text(unit_to[index], translate("Unit replacement phrase")),
-                    "conversion": float(conversion[index]),
+                    "conversion": parse_setting_conversion(conversion[index]),
                     "can_be_word": parse_bool(can_be_word[index], "unit_can"),
                 }
             )
@@ -489,7 +429,7 @@ async def update_setting_from_form(
     regex_values = field_values[4]
     submitted_phrases: list[dict[str, Any]] = []
     for index, source in enumerate(phrase_from):
-        source = validate_setting_text(source, translate("Phrase source"), strip=True)
+        source = validate_matcher(source, translate("Phrase source"), strip=True)
         if source:
             direct_value = parse_bool(direct[index], "phrase_direct")
             regex_value = direct_value and parse_bool(regex_values[index], "phrase_regex")
@@ -506,84 +446,24 @@ async def update_setting_from_form(
                 }
             )
 
-    image_submissions = _parse_image_submissions(form, existing_images_by_token)
-    for submission in image_submissions:
-        if (not submission.uploads and submission.existing_conversion_id is not None
-                and not files_by_conversion[submission.existing_conversion_id]):
-            raise ValidationError(translate("An image conversion has no stored images"))
-        for upload in submission.uploads:
+    images = _parse_image_submissions(form)
+    for image in images:
+        for upload in image.uploads:
             validate_image_upload_size(upload.size, upload.filename)
-
-    row_changes = (
-        (
-            Fandom,
-            _calculate_row_changes(
-                existing_fandoms,
-                submitted_fandoms,
-                ("name", "active", "separation", "support_value_1", "support_value_2"),
-            ),
-        ),
-        (
-            UnitConversion,
-            _calculate_row_changes(
-                existing_units,
-                submitted_units,
-                ("phrase_from", "phrase_to", "conversion", "can_be_word"),
-            ),
-        ),
-        (
-            PhraseConversion,
-            _calculate_row_changes(
-                existing_phrases,
-                submitted_phrases,
-                ("phrase_from", "phrase_to", "direct", "mutations", "regex"),
-            ),
-        ),
+    # The resulting total also needs stored-file sizes and is checked under the
+    # setting lock by update_setting before any database or object-store changes.
+    return SettingSubmission(
+        name=name,
+        public=parse_bool(form.get("set_public"), "set_public"),
+        clean_empty=parse_bool(form.get("set_empty"), "set_empty"),
+        convert_to_utf=parse_bool(form.get("set_utf"), "set_utf"),
+        use_comma_separator=parse_bool(form.get("set_coma_sep"), "set_coma_sep"),
+        expect_feet=parse_bool(form.get("set_expect_feet"), "set_expect_feet"),
+        fandoms=submitted_fandoms,
+        units=submitted_units,
+        phrases=submitted_phrases,
+        images=images,
     )
-    for model, changes in row_changes:
-        _apply_relation_changes(session, setting_id, model, changes)
-
-    retained_conversion_ids: set[int] = set()
-    for submission in image_submissions:
-        if submission.existing_conversion_id is None:
-            conversion_row = ImageConversion(
-                setting_id=setting_id,
-                phrase=submission.phrase,
-                separation=submission.separation,
-                explanation=submission.explanation,
-                mutations=submission.mutations,
-            )
-            session.add(conversion_row)
-            session.flush()
-        else:
-            conversion_row = next(value for value in existing_images if value.id == submission.existing_conversion_id)
-            retained_conversion_ids.add(conversion_row.id)
-            conversion_row.phrase = submission.phrase
-            conversion_row.separation = submission.separation
-            conversion_row.explanation = submission.explanation
-            conversion_row.mutations = submission.mutations
-        if submission.uploads:
-            for image_file in files_by_conversion[conversion_row.id]:
-                storage_changes.obsolete_object(image_file.object_key)
-                session.delete(image_file)
-            session.flush()
-            _upload_conversion_files(
-                session,
-                setting,
-                conversion_row,
-                submission.uploads,
-                storage,
-                storage_changes,
-            )
-
-    for conversion_row in existing_images:
-        if conversion_row.id in retained_conversion_ids:
-            continue
-        for image_file in files_by_conversion[conversion_row.id]:
-            storage_changes.obsolete_object(image_file.object_key)
-            session.delete(image_file)
-        session.delete(conversion_row)
-    session.flush()
 
 
 def job_paths(settings: AppSettings, job_id: int) -> tuple[Path, Path, Path]:
@@ -609,17 +489,24 @@ def _acquire_create_job_lock(session: Session, user_id: UUID) -> None:
     )
 
 
+def ensure_setting_available(setting: Setting | SettingData) -> None:
+    if setting.deletion_requested:
+        raise ValidationError(translate("This setting is pending deletion"))
+
+
 def _lock_setting_for_job(session: Session, setting_id: int) -> None:
     try:
-        locked_setting_id = session.scalar(
-            select(Setting.id).where(Setting.id == setting_id).with_for_update(read=True, nowait=True)
+        locked_setting = session.scalar(
+            select(Setting).where(Setting.id == setting_id).with_for_update(read=True, nowait=True)
+            .execution_options(populate_existing=True)
         )
     except OperationalError as exc:
         if getattr(exc.orig, "sqlstate", None) == "55P03":
             raise ValidationError(translate("Setting is currently being updated")) from exc
         raise
-    if locked_setting_id is None:
+    if locked_setting is None:
         raise ValidationError(translate("Setting not found"))
+    ensure_setting_available(locked_setting)
 
 
 async def create_job(

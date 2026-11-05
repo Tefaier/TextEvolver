@@ -1,5 +1,6 @@
 import datetime as dt
 import time
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -315,7 +316,7 @@ def test_search_form_redirects_with_encoded_query_parameters(registered_client: 
 
 def test_public_setting_uses_copy_action_for_non_owner(registered_client: TestClient, database):
     with Session(database) as session:
-        author = UserAccount(username="public-author")
+        author = UserAccount(id=uuid4(), username="public-author")
         session.add(author)
         session.flush()
         setting = Setting(owner_id=author.id, name="Public source", public=True)
@@ -489,7 +490,10 @@ def test_private_setting_requires_owner(client: TestClient, database):
     assert response.headers["location"].endswith("/login")
 
 
-def test_deleting_setting_deletes_its_stored_images(registered_client, database, image_storage):
+def test_deleting_setting_deletes_its_stored_images_after_worker_cleanup(
+    registered_client, database, image_storage, worker_database,
+):
+    from text_evolver.worker import cleanup_pending_settings
     with Session(database) as session:
         owner = session.scalar(select(UserAccount).where(UserAccount.username == "reader"))
         assert owner is not None
@@ -524,18 +528,26 @@ def test_deleting_setting_deletes_its_stored_images(registered_client, database,
         data={"csrf_token": token},
     )
 
-    assert response.status_code == 204
+    assert response.status_code == 202
+    with Session(database) as session:
+        assert session.get(Setting, setting_id).deletion_requested
+    assert object_key in image_storage.objects
+    assert cleanup_pending_settings(image_storage) == 1
     assert object_key not in image_storage.objects
     assert object_key in image_storage.deleted
     with Session(database) as session:
         assert session.get(Setting, setting_id) is None
 
 
-def test_deleting_setting_deletes_all_non_running_jobs(
+def test_deleting_setting_waits_for_queued_jobs_and_preserves_outputs(
     registered_client,
     database,
     app_settings,
+    image_storage,
+    worker_database,
 ):
+    from text_evolver.worker import cleanup_pending_settings
+
     with Session(database) as session:
         owner = session.scalar(select(UserAccount).where(UserAccount.username == "reader"))
         assert owner is not None
@@ -562,17 +574,28 @@ def test_deleting_setting_deletes_all_non_running_jobs(
         data={"csrf_token": token},
     )
 
-    assert response.status_code == 204
+    assert response.status_code == 202
+    assert cleanup_pending_settings(image_storage) == 0
+    with Session(database) as session:
+        assert session.get(Setting, setting_id).deletion_requested
+        queued = session.get(ProcessingJob, job_ids[0])
+        assert queued.status == "queued"
+        queued.status = "completed"
+        session.commit()
+    assert cleanup_pending_settings(image_storage) == 1
     with Session(database) as session:
         assert session.get(Setting, setting_id) is None
-        assert list(session.scalars(select(ProcessingJob).where(ProcessingJob.id.in_(job_ids)))) == []
+        jobs = list(session.scalars(select(ProcessingJob).where(ProcessingJob.id.in_(job_ids))))
+        assert len(jobs) == len(job_ids)
+        assert all(job.setting_id is None for job in jobs)
     for job_id in job_ids:
         paths = job_paths(app_settings, job_id)
         root = paths[0]
-        assert not root.exists()
+        assert root.exists()
 
 
-def test_deleting_setting_rejects_running_job(registered_client, database):
+def test_deleting_setting_waits_for_running_job(registered_client, database, image_storage, worker_database):
+    from text_evolver.worker import cleanup_pending_settings
     with Session(database) as session:
         owner = session.scalar(select(UserAccount).where(UserAccount.username == "reader"))
         assert owner is not None
@@ -591,8 +614,45 @@ def test_deleting_setting_rejects_running_job(registered_client, database):
         data={"csrf_token": token},
     )
 
-    assert response.status_code == 409
-    assert response.json() == {"detail": "Setting is used by a running job"}
+    assert response.status_code == 202
+    assert cleanup_pending_settings(image_storage) == 0
     with Session(database) as session:
-        assert session.get(Setting, setting_id) is not None
-        assert session.get(ProcessingJob, job_id) is not None
+        assert session.get(Setting, setting_id).deletion_requested
+        job = session.get(ProcessingJob, job_id)
+        assert job.status == "running"
+        job.status = "completed"
+        session.commit()
+    assert cleanup_pending_settings(image_storage) == 1
+
+
+def test_completed_documents_can_be_downloaded_after_setting_deletion(
+    registered_client, database, app_settings, image_storage, worker_database,
+):
+    from io import BytesIO
+    from zipfile import ZipFile
+
+    from text_evolver.worker import cleanup_pending_settings
+
+    with Session(database) as db:
+        owner = db.scalar(select(UserAccount).where(UserAccount.username == "reader"))
+        setting = Setting(owner_id=owner.id, name="Download")
+        db.add(setting)
+        db.flush()
+        job = ProcessingJob(user_id=owner.id, setting_id=setting.id, status="completed")
+        db.add(job)
+        db.commit()
+        setting_id = setting.id
+        job_id = job.id
+    paths = job_paths(app_settings, job_id)
+    paths[2].mkdir(parents=True)
+    (paths[2] / "book.html").write_bytes(b"processed document")
+    csrf = csrf_from(registered_client.get("/my_settings"))
+    assert registered_client.post(f"/delete_set/{setting_id}", data={"csrf_token": csrf}).status_code == 202
+    assert cleanup_pending_settings(image_storage) == 1
+    response = registered_client.post("/download_files", data={"csrf_token": csrf})
+    assert response.status_code == 200
+    with ZipFile(BytesIO(response.content)) as archive:
+        assert archive.read("Your files/book.html") == b"processed document"
+    with Session(database) as db:
+        assert db.get(ProcessingJob, job_id) is None
+    assert not paths[0].exists()

@@ -1249,3 +1249,24 @@ msgstr "Нет готовых файлов для скачивания"
 msgid "Request body exceeds the 512 MB size limit"
 msgstr "Размер тела запроса превышает ограничение в 512 МБ"
 
+
+msgid "A maximum of 3 passkeys is allowed."
+msgstr "Можно добавить не более 3 ключей доступа."
+
+msgid "Pending deletion; waiting for related jobs to finish."
+msgstr "Ожидает удаления после завершения связанных задач."
+
+msgid "This setting is pending deletion"
+msgstr "Эта настройка ожидает удаления"
+
+msgid "A setting can contain at most %(value0)s elements in total"
+msgstr "Настройка может содержать не более %(value0)s элементов суммарно"
+
+msgid "Setting images must total at most %(value0)s MiB"
+msgstr "Общий размер изображений настройки не должен превышать %(value0)s МиБ"
+
+msgid "Invalid image separation"
+msgstr "Некорректный интервал вставки изображений"
+
+msgid "Invalid unit conversion multiplier"
+msgstr "Некорректный коэффициент преобразования единиц"

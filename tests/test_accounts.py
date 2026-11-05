@@ -864,3 +864,39 @@ def test_recovery_clears_owners_failed_password_login_block(registered_client):
         ).status_code
         == 200
     )
+
+
+def test_passkey_limit_is_enforced_during_concurrent_verification(registered_client, database):
+    client = registered_client
+    enroll(client)
+    enroll(client)
+    with TestClient(client.app) as other:
+        other.post(
+            "/login", data={"username": "reader", "password": "correct horse"}, headers=headers(other),
+        )
+        clients = [client, other]
+        registrations = []
+        for browser in clients:
+            request_headers = headers(browser, "/account/settings")
+            options = browser.post("/auth/webauthn/register/options", json={}, headers=request_headers).json()
+            authenticator = Authenticator()
+            registrations.append({
+                "headers": request_headers,
+                "json": {"flow": options["flow"], "credential": authenticator.registration(options["publicKey"]),
+                         "name": "Concurrent"},
+            })
+        barrier = threading.Barrier(2)
+
+        def verify(index):
+            barrier.wait(timeout=10)
+            return clients[index].post("/auth/webauthn/register/verify", **registrations[index]).status_code
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(verify, range(2)))
+        assert sorted(results) == [200, 409]
+    with Session(database) as db:
+        assert len(list(db.scalars(select(Passkey)))) == 3
+    assert client.post("/auth/webauthn/register/options", json={}, headers=headers(client)).status_code == 409
+    page = client.get("/account/settings")
+    assert "A maximum of 3 passkeys is allowed." in page.text
+    assert 'data-webauthn="register"' not in page.text

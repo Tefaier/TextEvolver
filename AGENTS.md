@@ -34,7 +34,7 @@ podman compose up --build
   login-page GET handler, shared by `/` and `/login`.
 - `src/text_evolver/web/routines/` contains router helpers grouped into rendering,
   responses, flash messages, processing status, account checks, password helpers,
-  Google OIDC, and passkey encoding.
+  Google OIDC, passkey encoding, and persistence of validated settings.
   Routers import routines; routines must not import routers.
 - `web/routines/validation_utils.py` owns fixed validation rules for submitted
   values. Keep request parsing, database lookups, and authorization in callers.
@@ -79,6 +79,12 @@ Before starting the thread pool, the worker refreshes Pokémon data under
 source; job children must not scrape Pokémon pages. Refreshes compare the live
 list with valid cached rows and download only missing entries.
 
+Setting deletion is asynchronous. A deletion request blocks edits, copies, and
+new runs. The worker waits until all related queued/running jobs are terminal,
+then deletes the setting; completed jobs retain their output and their setting
+reference becomes null. `setting_image_deletion` durably queues S3 keys for
+removal after the database commit, including retries after storage failures.
+
 One worker replica is supported. On startup it returns interrupted `running`
 jobs to `queued`.
 
@@ -106,7 +112,10 @@ metadata creation or restore Alembic/Flask-Migrate.
 
 Schema string columns use `TEXT`. Preserve user-facing size limits in service
 validation rather than database `VARCHAR` declarations; editable setting text
-fields currently accept at most 64 characters.
+fields currently accept at most 64 characters, except source matchers (unit,
+phrase/regex, image trigger), which accept at most 128. Settings contain at most
+100 elements across all rule types and at most 512 MiB of images, including
+retained files and new uploads while excluding replaced files.
 
 ## Configuration and paths
 

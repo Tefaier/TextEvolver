@@ -23,9 +23,14 @@
                         <span class="setting-number">{{ "%02d"|format(loop.index) }}</span>
                         <span class="setting-summary">
                             <strong class="setting-link">{{ setting.name }}</strong>
+                            {% if setting.deletion_requested %}
+                            <span>{{ translate('Pending deletion; waiting for related jobs to finish.') }}</span>
+                            {% else %}
                             <span>{{ translate("Public") if setting.public else translate("Private") }}</span>
+                            {% endif %}
                         </span>
                     </a>
+                    {% if not setting.deletion_requested %}
                     <button class="settings-menu-trigger" type="button"
                             aria-label="{{ translate('Actions for %(name)s', name=setting.name) }}"
                             aria-controls="settings-menu-{{ setting.id }}"
@@ -52,6 +57,7 @@
                             </div>
                         </div>
                     </div>
+                    {% endif %}
                 </article>
                 {% else %}
                 <div class="empty-state">

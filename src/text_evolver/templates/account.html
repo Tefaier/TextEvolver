@@ -81,9 +81,13 @@
             </form>
         </div>
         {% endfor %}
+        {% if passkeys|length >= 3 %}
+        <p>{{ translate('A maximum of 3 passkeys is allowed.') }}</p>
+        {% else %}
         <label for="passkey-name">{{ translate('New passkey name') }}</label>
         <input id="passkey-name" maxlength="64" value="{{ translate('My passkey') }}">
         <button class="button" type="button" data-webauthn="register">{{ translate('Activate WebAuthn or add a passkey') }}</button>
+        {% endif %}
     </section>
     <p><a href="{{ url_for('reauthenticate_page') }}">{{ translate('Authenticate again') }}</a></p>
 </section>

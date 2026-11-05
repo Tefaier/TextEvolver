@@ -3,7 +3,7 @@ import json
 import webauthn
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from webauthn.helpers import bytes_to_base64url, options_to_json
@@ -24,6 +24,7 @@ from text_evolver.web.routines.accounts import lock_user
 from text_evolver.web.routines.passkeys import decode
 from text_evolver.web.utils import utcnow
 from text_evolver.web.validation_utils import (
+    PASSKEY_LIMIT,
     ValidationError,
     validate_passkey_name,
     validate_webauthn_body,
@@ -49,7 +50,7 @@ async def options(
     if operation == "register":
         user = require_recent(request, db)
         keys = list(db.scalars(select(Passkey).where(Passkey.user_id == user.id)))
-        if len(keys) >= 3:
+        if len(keys) >= PASSKEY_LIMIT:
             raise HTTPException(409, "A maximum of 3 passkeys is allowed.")
         public = webauthn.generate_registration_options(
             rp_id=settings.webauthn_rp_id,
@@ -114,6 +115,10 @@ async def verify(
             )
         except Exception:
             raise HTTPException(400, "Authentication failed. Please try again.") from None
+        lock_user(db, user.id)
+        count = db.scalar(select(func.count()).select_from(Passkey).where(Passkey.user_id == user.id)) or 0
+        if count >= PASSKEY_LIMIT:
+            raise HTTPException(409, "A maximum of 3 passkeys is allowed.")
         try:
             with db.begin_nested():
                 db.add(

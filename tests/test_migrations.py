@@ -31,6 +31,7 @@ def test_sqlite_flyway_baseline_is_fresh_and_complete(tmp_path: Path):
         "phrase_conversion",
         "image_conversion",
         "image_conversion_file",
+        "setting_image_deletion",
         "processing_job",
     }
     indexes = {row[0] for row in database.execute("SELECT name FROM sqlite_master WHERE type = 'index'")}
@@ -59,6 +60,7 @@ def test_sqlite_flyway_baseline_is_fresh_and_complete(tmp_path: Path):
         "user_password",
         "browser_session",
         "google_identity",
+        "setting_image_deletion",
     }:
         id_column = next(column for column in database.execute(f"PRAGMA table_info({table})") if column[1] == "id")
         assert id_column[3] == 1
@@ -118,6 +120,7 @@ def test_postgresql_and_sqlite_baselines_declare_the_same_tables():
         "phrase_conversion",
         "image_conversion",
         "image_conversion_file",
+        "setting_image_deletion",
         "processing_job",
     }
     for dialect in ("postgresql", "sqlite"):
@@ -130,7 +133,7 @@ def test_postgresql_and_sqlite_baselines_declare_the_same_tables():
     postgresql_sql = "\n".join(
         path.read_text(encoding="utf-8") for path in sorted(Path("migrations/sql/postgresql").glob("V*.sql"))
     ).upper()
-    assert postgresql_sql.count("ID BIGSERIAL PRIMARY KEY") == len(expected) - 6
+    assert postgresql_sql.count("ID BIGSERIAL PRIMARY KEY") == len(expected) - 7
     assert "REGEX BOOLEAN NOT NULL DEFAULT FALSE" in postgresql_sql
     assert "PASSWORD_HASH TEXT NOT NULL" in postgresql_sql
     assert "ID UUID PRIMARY KEY" in postgresql_sql
@@ -152,7 +155,8 @@ def test_sqlalchemy_model_generation_is_deterministic(tmp_path: Path):
     outputs = [tmp_path / "models-one.py", tmp_path / "models-two.py"]
     tables = (
         "browser_session,browser_session_flash,google_identity,passkey,auth_flow,user_account,user_password,setting,fandom,unit_conversion,"
-        "login_failure,login_failure_by_account,phrase_conversion,image_conversion,image_conversion_file,processing_job"
+        "login_failure,login_failure_by_account,phrase_conversion,image_conversion,image_conversion_file,"
+        "setting_image_deletion,processing_job"
     )
     for output in outputs:
         subprocess.run(

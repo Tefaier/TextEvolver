@@ -1260,3 +1260,24 @@ msgstr "No completed files to download"
 msgid "Request body exceeds the 512 MB size limit"
 msgstr "Request body exceeds the 512 MB size limit"
 
+
+msgid "A maximum of 3 passkeys is allowed."
+msgstr "A maximum of 3 passkeys is allowed."
+
+msgid "Pending deletion; waiting for related jobs to finish."
+msgstr "Pending deletion; waiting for related jobs to finish."
+
+msgid "This setting is pending deletion"
+msgstr "This setting is pending deletion"
+
+msgid "A setting can contain at most %(value0)s elements in total"
+msgstr "A setting can contain at most %(value0)s elements in total"
+
+msgid "Setting images must total at most %(value0)s MiB"
+msgstr "Setting images must total at most %(value0)s MiB"
+
+msgid "Invalid image separation"
+msgstr "Invalid image separation"
+
+msgid "Invalid unit conversion multiplier"
+msgstr "Invalid unit conversion multiplier"

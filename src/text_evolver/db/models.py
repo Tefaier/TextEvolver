@@ -34,6 +34,12 @@ class LoginFailureByAccount(Base):
     last_failure_at: Mapped[datetime.datetime] = mapped_column(TIMESTAMP, nullable=False)
 
 
+class SettingImageDeletion(Base):
+    __tablename__ = 'setting_image_deletion'
+
+    object_key: Mapped[str] = mapped_column(Text, primary_key=True)
+
+
 class UserAccount(Base):
     __tablename__ = 'user_account'
     __table_args__ = (
@@ -123,6 +129,7 @@ class Setting(Base):
     clean_empty: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('FALSE'))
     convert_to_utf: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('FALSE'))
     use_comma_separator: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('FALSE'))
+    deletion_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('FALSE'))
     expect_feet: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('FALSE'))
 
     owner: Mapped['UserAccount'] = relationship('UserAccount', back_populates='setting')
@@ -242,16 +249,16 @@ class ProcessingJob(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('user_account.id'), nullable=False)
-    setting_id: Mapped[int] = mapped_column(ForeignKey('setting.id'), nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'queued'"))
     cancellation_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('FALSE'))
     created_at: Mapped[datetime.datetime] = mapped_column(TIMESTAMP, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
+    setting_id: Mapped[Optional[int]] = mapped_column(ForeignKey('setting.id'))
     started_at: Mapped[Optional[datetime.datetime]] = mapped_column(TIMESTAMP)
     finished_at: Mapped[Optional[datetime.datetime]] = mapped_column(TIMESTAMP)
     heartbeat_at: Mapped[Optional[datetime.datetime]] = mapped_column(TIMESTAMP)
     error_message: Mapped[Optional[str]] = mapped_column(Text)
 
-    setting: Mapped['Setting'] = relationship('Setting', back_populates='processing_job')
+    setting: Mapped[Optional['Setting']] = relationship('Setting', back_populates='processing_job')
     user: Mapped['UserAccount'] = relationship('UserAccount', back_populates='processing_job')
 
 

@@ -1,6 +1,7 @@
 import os
 import re
 from collections.abc import Generator
+from contextlib import contextmanager
 from itertools import count
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -130,3 +131,21 @@ def registered_client(client: TestClient) -> TestClient:
     )
     assert response.status_code == 200
     return client
+
+
+@pytest.fixture
+def worker_database(monkeypatch, database, app_settings):
+    from text_evolver import worker
+
+    @contextmanager
+    def test_session_scope():
+        with Session(database) as session:
+            try:
+                yield session
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
+
+    monkeypatch.setattr(worker, "session_scope", test_session_scope)
+    monkeypatch.setattr(worker, "get_application_settings", lambda: app_settings)

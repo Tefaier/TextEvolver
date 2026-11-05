@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import shutil
-
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.datastructures import UploadFile
 
@@ -16,13 +14,11 @@ from text_evolver.services import (
     copy_setting,
     create_default_setting,
     create_job,
+    ensure_setting_available,
     get_setting,
-    job_paths,
     list_user_settings,
-    lock_setting_jobs_for_deletion,
+    parse_setting_form,
     search_settings,
-    setting_image_object_keys,
-    update_setting_from_form,
 )
 from text_evolver.web.auth import require_user
 from text_evolver.web.i18n import translate
@@ -30,6 +26,7 @@ from text_evolver.web.routines.accounts import lock_user
 from text_evolver.web.routines.flashes import flash
 from text_evolver.web.routines.rendering import navigation_context, render
 from text_evolver.web.routines.responses import accepts_json, form_redirect, validation_error_response
+from text_evolver.web.routines.settings import update_setting
 from text_evolver.web.validation_utils import ALLOWED_EXTENSIONS, ValidationError
 
 router = APIRouter()
@@ -72,36 +69,17 @@ async def delete_set(
     setting_id: int,
     request: Request,
     session: Session = Depends(get_db),
-    app_settings: AppSettings = Depends(get_application_settings),
-    image_storage: ImageStorage = Depends(get_image_storage),
 ) -> Response:
     user = require_user(request, session)
     setting = session.scalar(
         select(Setting).where(Setting.id == setting_id, Setting.owner_id == user.id).with_for_update()
+        .execution_options(populate_existing=True)
     )
     if setting is None:
         raise HTTPException(status_code=404, detail="Setting not found")
-    jobs = lock_setting_jobs_for_deletion(session, setting_id)
-    if any(job.status == "running" for job in jobs):
-        raise HTTPException(status_code=409, detail="Setting is used by a running job")
-    storage_changes = ImageStorageChanges(image_storage)
-    for object_key in setting_image_object_keys(session, setting_id):
-        storage_changes.obsolete_object(object_key)
-    for job in jobs:
-        session.delete(job)
-    session.execute(delete(Setting).where(Setting.id == setting_id))
-    try:
-        session.commit()
-    except Exception:
-        session.rollback()
-        storage_changes.database_rolled_back()
-        raise
-    for job in jobs:
-        paths = job_paths(app_settings, job.id)
-        root = paths[0]
-        shutil.rmtree(root, ignore_errors=True)
-    storage_changes.database_committed()
-    return Response(status_code=204)
+    setting.deletion_requested = True
+    session.commit()
+    return JSONResponse({"status": "pending_deletion"}, status_code=status.HTTP_202_ACCEPTED)
 
 
 @router.post("/search_req", name="search_req")
@@ -170,7 +148,9 @@ async def setting_submit(
     database_committed = False
     try:
         with session.begin_nested():
+            ensure_setting_available(setting)
             if "copy" in form:
+                lock_user(session, user.id)
                 if setting.owner_id == user.id:
                     raise ValidationError("You already own this setting")
                 if len(list_user_settings(session, user.id)) >= user.setting_limit:
@@ -181,16 +161,17 @@ async def setting_submit(
                 if ("save" in form or "save_run" in form) and not owns_setting:
                     raise HTTPException(status_code=403, detail="Only the owner can edit a setting")
                 if "save" in form or "save_run" in form:
-                    await update_setting_from_form(
+                    data = parse_setting_form(form)
+                    update_setting(
                         session,
                         setting_id,
-                        form,
+                        data,
                         image_storage,
                         storage_changes,
                     )
                     flash(
                         request,
-                        translate('Setting change successful with name "%(name)s"', name=form.get("set_name")),
+                        translate('Setting change successful with name "%(name)s"', name=data.name),
                         "success",
                     )
                 if "run" in form or "save_run" in form:

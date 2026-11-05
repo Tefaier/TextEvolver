@@ -43,7 +43,7 @@
             <div class="col">
                 <div class="data_info">
                     <label>{{ translate('Initial unit') }}</label>
-                    <input name="unit_from" class="slim_input" type="text" value="From" size="15" minlength="1" maxlength="64">
+                    <input name="unit_from" class="slim_input" type="text" value="From" size="15" minlength="1" maxlength="128">
                 </div>
                 <div class="data_info">
                     <label>{{ translate('New unit') }}</label>
@@ -71,7 +71,7 @@
             <div class="col">
                 <div class="data_info">
                     <label>{{ translate('Trigger phrase') }}</label>
-                    <input name="image_phrase" class="slim_input" type="text" value="Phrase" size="15" minlength="1" maxlength="64">
+                    <input name="image_phrase" class="slim_input" type="text" value="Phrase" size="15" minlength="1" maxlength="128">
                 </div>
                 <div class="data_info">
                     <label>{{ translate('Separation') }}</label>
@@ -102,7 +102,7 @@
             <div class="col">
                 <div class="data_info">
                     <label>{{ translate('Change from') }}</label>
-                    <input name="phrase_from" class="slim_input" type="text" value="Phrase from" size="15" minlength="1" maxlength="64">
+                    <input name="phrase_from" class="slim_input" type="text" value="Phrase from" size="15" minlength="1" maxlength="128">
                 </div>
                 <div class="data_info">
                     <label>{{ translate('Change to') }}</label>
@@ -207,6 +207,11 @@
         </header>
         <section class="panel editor-panel">
             <form class="editor-form" action="{{ url_for('setting', setting_id=setting.id) }}" method="POST" enctype=multipart/form-data>
+                {% if setting.deletion_requested %}
+                <p role="status">{{ translate('Pending deletion; waiting for related jobs to finish.') }}</p>
+                {% endif %}
+                <fieldset class="setting-fields" {% if setting.deletion_requested %}disabled{% endif %}>
+
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <section class="editor-section">
                     <div class="editor-section-copy">
@@ -406,7 +411,7 @@
                     <div class="col"> {# information of unit convertation #}
                         <div class="data_info"> {# unit_conv.phrase_from #}
                             <label>{{ translate('Initial unit') }}</label>
-                            <input name="unit_from" class="slim_input" type="text" value="{{ unit_conv.phrase_from }}" size="15" minlength="1" maxlength="64">
+                            <input name="unit_from" class="slim_input" type="text" value="{{ unit_conv.phrase_from }}" size="15" minlength="1" maxlength="128">
                         </div>
                         <div class="data_info"> {# unit_conv.phrase_to #}
                             <label>{{ translate('New unit') }}</label>
@@ -458,7 +463,7 @@
                     <div class="col"> {# information of image_conv #}
                         <div class="data_info"> {# image_conv.phrase #}
                             <label>{{ translate('Trigger phrase') }}</label>
-                            <input name="image_phrase" class="slim_input" type="text" value="{{ image_conv.phrase }}" size="15" minlength="1" maxlength="64">
+                            <input name="image_phrase" class="slim_input" type="text" value="{{ image_conv.phrase }}" size="15" minlength="1" maxlength="128">
                         </div>
                         <div class="data_info"> {# image_conv.separation #}
                             <label>{{ translate('Separation') }}</label>
@@ -513,7 +518,7 @@
                     <div class="col"> {# information of text convertation #}
                         <div class="data_info"> {# phrase_conv.phrase_from #}
                             <label>{{ translate('Change from') }}</label>
-                            <input name="phrase_from" class="slim_input" type="text" value="{{ phrase_conv.phrase_from }}" size="15" minlength="1" maxlength="64">
+                            <input name="phrase_from" class="slim_input" type="text" value="{{ phrase_conv.phrase_from }}" size="15" minlength="1" maxlength="128">
                         </div>
                         <div class="data_info"> {# phrase_conv.phrase_to #}
                             <label>{{ translate('Change to') }}</label>
@@ -602,6 +607,7 @@
                         <input class="button" type="submit" name="run" id="Run" data-job-blocked="{{ 'false' if (files_situation[0]==0 and files_situation[1]==0) else 'true' }}" value="{{ translate('Run') }}{{ '' if (files_situation[0]==0 and files_situation[1]==0) else translate(' (disabled)') }}" disabled>
                     </div>
                 </footer>
+                </fieldset>
             </form>
         </section>
     </section>

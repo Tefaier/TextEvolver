@@ -121,18 +121,8 @@
                         window.showNotification(payload.detail || window.teTranslate('Setting could not be deleted.'));
                         return false;
                     }
-                    const row = document.getElementById(but.name);
-                    if (row != null){
-                        row.remove();
-                    }
-                    const count = document.querySelector("[data-settings-count]");
-                    if (count != null){
-                        count.textContent = String(document.querySelectorAll("[data-setting-row]").length);
-                    }
-                    const addButton = document.querySelector("[name='New_setting']");
-                    if (addButton != null) {
-                        addButton.disabled = false;
-                    }
+                    // Reload to show pending deletion and keep it counted until the worker removes it.
+                    window.location.reload();
                 } catch (_error) {
                     window.showNotification(window.teTranslate('Setting could not be deleted. Check your connection and try again.'));
                 } finally {

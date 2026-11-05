@@ -35,12 +35,17 @@ async def start(
     try:
         validate_google_purpose(purpose)
     except ValidationError as exc:
+        # A caller submitted a purpose other than login, link, or reauthenticate.
         raise HTTPException(422, str(exc)) from None
-    user = (
-        require_recent(request, db)
-        if purpose == "link"
-        else (require_user(request, db) if purpose == "reauthenticate" else None)
-    )
+    if purpose == "link":
+        # Account settings starts linking an additional sign-in method after recent authentication.
+        user = require_recent(request, db)
+    elif purpose == "reauthenticate":
+        # An authenticated user chose Google on the reauthentication page to refresh freshness.
+        user = require_user(request, db)
+    else:
+        # The login/registration page starts sign-in without binding the flow to an account.
+        user = None
     nonce = secrets.token_urlsafe(32)
     verifier = secrets.token_urlsafe(48)
     flow = create_flow(
@@ -58,6 +63,7 @@ async def start(
     return RedirectResponse(url, 303)
 
 
+# Google redirects here with the single-use state issued by /auth/google/start.
 @router.get("/auth/google/callback", name="google_callback")
 async def callback(
     request: Request, db: Session = Depends(get_db), settings: AppSettings = Depends(get_application_settings)
@@ -67,6 +73,7 @@ async def callback(
     target_user = flow.user_id
     db.commit()  # Release the connection and consume state before contacting Google.
     if request.query_params.get("error") or not request.query_params.get("code"):
+        # Consent was denied/cancelled, or Google returned no authorization code.
         flash(request, "Authentication failed or was cancelled. Please try again.")
         return RedirectResponse("/login" if target_user is None else "/account/settings", 303)
     try:
@@ -78,6 +85,7 @@ async def callback(
             payload["nonce"]
         )
     except Exception:
+        # Token exchange or ID-token verification failed after Google redirected back.
         # Provider responses can contain tokens. Do not log or display the exception.
         raise HTTPException(400, "Authentication failed. Please try again.") from None
     subject = claims["sub"]
@@ -85,7 +93,9 @@ async def callback(
         select(GoogleIdentity).where(GoogleIdentity.issuer == google_routines.ISSUER, GoogleIdentity.subject == subject)
     )
     if payload["purpose"] == "login":
+        # A login-page flow returns with a verified Google subject.
         if identity:
+            # This subject is already linked; sign in to its existing local account.
             user = lock_user(db, identity.user_id)
             identity = db.scalar(
                 select(GoogleIdentity)
@@ -97,13 +107,16 @@ async def callback(
                 .execution_options(populate_existing=True)
             )
             if identity is None:
+                # Unlinking won the account lock while this callback was waiting.
                 raise HTTPException(403, "Authentication failed. Please try again.")
             login(request, user, "google")
             return RedirectResponse("/my_settings", 303)
+        # First sign-in with this subject: ask for a local username before creating an account.
         create_flow(request, db, "google_signup", {"subject": subject})
         return RedirectResponse("/auth/google/complete", 303)
     user = require_user(request, db)
     if user.id != target_user:
+        # The browser changed accounts after starting a link/reauthentication flow.
         raise HTTPException(403, "Authentication failed. Please try again.")
     user = lock_user(db, user.id)
     identity = db.scalar(
@@ -112,26 +125,34 @@ async def callback(
         .execution_options(populate_existing=True)
     )
     if payload["purpose"] == "reauthenticate":
+        # A reauthentication-page flow must prove ownership of the current linked identity.
         if identity is None or identity.user_id != user.id:
+            # The selected Google account is unlinked or belongs to another local account.
             raise HTTPException(403, "Authentication failed. Please try again.")
         login(request, user, "google", recreate=False)
     else:
+        # The remaining validated purpose is link, started from account settings.
         require_recent(request, db)
         if identity and identity.user_id != user.id:
+            # A different local account already owns the selected Google subject.
             raise HTTPException(409, "This Google account is already linked.")
         existing = db.scalar(select(GoogleIdentity).where(GoogleIdentity.user_id == user.id))
         if existing and existing.subject != subject:
+            # This local account already has another Google subject; replacement requires unlinking first.
             raise HTTPException(409, "This account already has a linked Google identity.")
         if not existing:
+            # Both sides are available, so persist the new link. Re-linking the same subject is a no-op.
             try:
                 with db.begin_nested():
                     db.add(GoogleIdentity(user_id=user.id, issuer=google_routines.ISSUER, subject=subject))
                     db.flush()
             except IntegrityError:
+                # Another callback linked this Google subject after the availability check.
                 raise HTTPException(409, "This Google account is already linked.") from None
     return RedirectResponse("/account/settings", 303)
 
 
+# First-time Google sign-in redirects here to collect the local username.
 @router.get("/auth/google/complete", name="google_complete_page")
 def complete_page(request: Request):
     return render(request, "google_complete.html")
@@ -154,6 +175,7 @@ async def complete(request: Request, db: Session = Depends(get_db)):
         )
     )
     if pending is None:
+        # The signup flow expired, was consumed, or belongs to another browser session.
         raise HTTPException(400, "Authentication failed. Please try again.")
     try:
         with db.begin_nested():
@@ -164,6 +186,7 @@ async def complete(request: Request, db: Session = Depends(get_db)):
             db.delete(pending)
             db.flush()
     except (IntegrityError, ValidationError):
+        # Another signup claimed the username or Google subject before this transaction completed.
         raise HTTPException(409, "Username or Google account is already registered.") from None
     login(request, user, "google")
     return form_redirect(request, "my_settings")
