@@ -16,6 +16,7 @@ def test_sqlite_flyway_baseline_is_fresh_and_complete(tmp_path: Path):
         for row in database.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
     }
     assert tables == {
+        "api_token",
         "browser_session",
         "browser_session_flash",
         "google_identity",
@@ -58,6 +59,7 @@ def test_sqlite_flyway_baseline_is_fresh_and_complete(tmp_path: Path):
         "login_failure",
         "login_failure_by_account",
         "user_password",
+        "api_token",
         "browser_session",
         "google_identity",
         "setting_image_deletion",
@@ -105,6 +107,7 @@ def test_sqlite_flyway_baseline_is_fresh_and_complete(tmp_path: Path):
 
 def test_postgresql_and_sqlite_baselines_declare_the_same_tables():
     expected = {
+        "api_token",
         "browser_session",
         "browser_session_flash",
         "google_identity",
@@ -133,7 +136,7 @@ def test_postgresql_and_sqlite_baselines_declare_the_same_tables():
     postgresql_sql = "\n".join(
         path.read_text(encoding="utf-8") for path in sorted(Path("migrations/sql/postgresql").glob("V*.sql"))
     ).upper()
-    assert postgresql_sql.count("ID BIGSERIAL PRIMARY KEY") == len(expected) - 7
+    assert postgresql_sql.count("ID BIGSERIAL PRIMARY KEY") == len(expected) - 8
     assert "REGEX BOOLEAN NOT NULL DEFAULT FALSE" in postgresql_sql
     assert "PASSWORD_HASH TEXT NOT NULL" in postgresql_sql
     assert "ID UUID PRIMARY KEY" in postgresql_sql
@@ -154,7 +157,7 @@ def test_sqlalchemy_model_generation_is_deterministic(tmp_path: Path):
     connection.close()
     outputs = [tmp_path / "models-one.py", tmp_path / "models-two.py"]
     tables = (
-        "browser_session,browser_session_flash,google_identity,passkey,auth_flow,user_account,user_password,setting,fandom,unit_conversion,"
+        "api_token,browser_session,browser_session_flash,google_identity,passkey,auth_flow,user_account,user_password,setting,fandom,unit_conversion,"
         "login_failure,login_failure_by_account,phrase_conversion,image_conversion,image_conversion_file,"
         "setting_image_deletion,processing_job"
     )

@@ -9,10 +9,9 @@ from starlette.datastructures import UploadFile
 from text_evolver.config import AppSettings, get_application_settings
 from text_evolver.db.models import Setting
 from text_evolver.db.session import get_db
-from text_evolver.image_storage import ImageStorage, ImageStorageChanges, get_image_storage
+from text_evolver.image_storage import ImageStorage, get_image_storage
 from text_evolver.services import (
     copy_setting,
-    create_default_setting,
     create_job,
     ensure_setting_available,
     get_setting,
@@ -20,13 +19,14 @@ from text_evolver.services import (
     parse_setting_form,
     search_settings,
 )
+from text_evolver.setting_service import create_owned_setting, update_setting
+from text_evolver.transactions import setting_changes
 from text_evolver.web.auth import require_user
 from text_evolver.web.i18n import translate
 from text_evolver.web.routines.accounts import lock_user
 from text_evolver.web.routines.flashes import flash
 from text_evolver.web.routines.rendering import navigation_context, render
 from text_evolver.web.routines.responses import accepts_json, form_redirect, validation_error_response
-from text_evolver.web.routines.settings import update_setting
 from text_evolver.web.validation_utils import ALLOWED_EXTENSIONS, ValidationError
 
 router = APIRouter()
@@ -60,7 +60,7 @@ async def add_set(request: Request, session: Session = Depends(get_db)) -> Respo
             )
         flash(request, "Reached the allowed settings limit")
     else:
-        create_default_setting(session, user.id)
+        create_owned_setting(session, user)
     return form_redirect(request, "my_settings")
 
 
@@ -144,10 +144,8 @@ async def setting_submit(
     setting = get_setting(session, setting_id)
     if setting is None or (not setting.public and setting.owner_id != user.id):
         raise HTTPException(status_code=404, detail="Setting not found")
-    storage_changes = ImageStorageChanges(image_storage)
-    database_committed = False
     try:
-        with session.begin_nested():
+        with setting_changes(session, image_storage) as storage_changes:
             ensure_setting_available(setting)
             if "copy" in form:
                 lock_user(session, user.id)
@@ -177,13 +175,8 @@ async def setting_submit(
                 if "run" in form or "save_run" in form:
                     uploads = [value for value in form.getlist("Process_files") if isinstance(value, UploadFile)]
                     await create_job(session, app_settings, user.id, setting_id, uploads)
-        session.commit()
-        storage_changes.database_committed()
-        database_committed = True
         return form_redirect(request, "my_settings")
     except ValidationError as exc:
-        session.rollback()
-        storage_changes.database_rolled_back()
         refreshed = get_setting(session, setting_id) or setting
         return validation_error_response(
             request,
@@ -193,8 +186,3 @@ async def setting_submit(
             setting=refreshed,
             allowed_extensions=sorted(ALLOWED_EXTENSIONS),
         )
-    except Exception:
-        if not database_committed:
-            session.rollback()
-            storage_changes.database_rolled_back()
-        raise

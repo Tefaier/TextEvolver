@@ -177,3 +177,11 @@ CREATE TABLE browser_session_flash (
     message TEXT NOT NULL
 );
 CREATE INDEX ix_browser_session_flash_token_hash ON browser_session_flash(browser_session_token_hash);
+
+CREATE TABLE api_token (
+    user_id TEXT NOT NULL REFERENCES user_account(id) ON DELETE CASCADE,
+    permission TEXT NOT NULL CHECK (permission = 'read' OR permission = 'read_write'),
+    token_hash TEXT NOT NULL UNIQUE,
+    issued_at TIMESTAMP NOT NULL,
+    PRIMARY KEY (user_id, permission)
+);

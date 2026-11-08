@@ -340,3 +340,128 @@ TODO
 - tokens creation, refresh, delete via settings (max one read, and one read+write)
 - api to work with processing settings and to discover them, search, create tasks, check status, get result
 - logs, metrics, traces, export to grafana (otel to write, prometheus, loki, jaeger to store at rest, grafana to display)
+
+## Account tokens and API
+
+Open **Account settings → API tokens** to create a read-only or read+write token.
+Each account has at most one token of each permission. Creation, refresh, and
+deletion require recent authentication and the browser's CSRF token. Save a new
+token when it is displayed: only its SHA-256 digest is stored, so it cannot be
+shown again. Tokens never expire. Refresh immediately replaces the previous
+secret; deletion revokes it. Password changes and password recovery revoke both
+tokens, while browser logout leaves them valid.
+
+Interactive documentation is available at `/api/v1/docs`, with the OpenAPI
+schema at `/api/v1/openapi.json`. All data endpoints require
+`Authorization: Bearer <token>`; browser cookies and query-string tokens do not
+authenticate API requests. The API uses JSON errors in English and does not issue
+browser cookies or require CSRF tokens. `401` means missing/invalid credentials,
+`403` means insufficient permission, `404` conceals inaccessible resources,
+`409` indicates a state conflict, `422` indicates invalid input, and `413`
+indicates an oversized request.
+
+Read-only tokens can list/search/read accessible settings, download their image
+files, inspect the account's tasks, and download completed results. Read+write
+tokens additionally manage settings/images and submit or cancel tasks. Account
+credentials and API tokens themselves are managed through the website.
+
+### Settings
+
+`GET /api/v1/settings` defaults to owned settings. Use `scope=accessible` to
+include public settings and `q` to search by name. `page` starts at 1;
+`page_size` defaults to `RESULTS_PER_PAGE` and cannot exceed 200. Lists return
+`items`, `total`, `page`, and `page_size`. Owned settings pending deletion remain
+visible; other accounts' settings pending deletion are excluded.
+
+`POST /settings` creates a setting and `GET /settings/{id}` reads its complete
+configuration. `PATCH /settings/{id}` preserves omitted fields and replaces each
+supplied rule array; null fields are rejected. Paths in the following examples
+are relative to `/api/v1`:
+
+```bash
+export TE_BASE_URL='http://localhost:8000/api/v1'
+# Set TE_API_TOKEN to the secret shown in account settings.
+
+curl "$TE_BASE_URL/settings?scope=accessible&q=Book" \
+  -H "Authorization: Bearer $TE_API_TOKEN"
+
+curl -X POST "$TE_BASE_URL/settings" \
+  -H "Authorization: Bearer $TE_API_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Book","public":false,"units":[{"phrase_from":"inch","phrase_to":"cm","conversion":2.54}],"phrases":[{"phrase_from":"old","phrase_to":"new","direct":true}]}'
+
+curl -X PATCH "$TE_BASE_URL/settings/1" \
+  -H "Authorization: Bearer $TE_API_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Updated book","clean_empty":true,"phrases":[]}'
+```
+
+Setting options are `name`, `public`, `clean_empty`, `convert_to_utf`,
+`use_comma_separator`, and `expect_feet`. Rule arrays are `fandoms`, `units`, and
+`phrases`; the OpenAPI schemas describe their fields. A new setting defaults to
+an inactive Pokémon rule, no unit/phrase rules, and false options. Explicit
+arrays replace these defaults. Images are managed separately.
+
+`POST /settings/{id}/copy` copies another account's accessible setting into your
+account as a private setting, including independent copies of its S3 images.
+`DELETE /settings/{id}` requests asynchronous deletion and returns
+`202 {"status":"pending_deletion"}`. Pending deletion blocks edits, copies, and
+new tasks. Only owners may edit/delete settings; settings in use by active tasks
+cannot be edited. The existing setting count, rule count, text, image-size, and
+upload limits apply equally to browser and API requests.
+
+### Image rules
+
+`POST /settings/{id}/images` creates an image rule using multipart `metadata`
+(JSON with `phrase`, `separation`, `explanation`, and `mutations`) and one or
+more repeated `files` fields. Uploaded order determines stored file order.
+`PUT /settings/{id}/images/{image_id}` replaces metadata; omitting `files`
+retains existing files, while supplying files replaces the whole collection.
+`DELETE /settings/{id}/images/{image_id}` removes the rule.
+
+```bash
+curl -X POST "$TE_BASE_URL/settings/1/images" \
+  -H "Authorization: Bearer $TE_API_TOKEN" \
+  -F 'metadata={"phrase":"cat","separation":1,"explanation":"A cat","mutations":false}' \
+  -F 'files=@cat.png' -F 'files=@another-cat.png'
+```
+
+Setting/image responses include rule IDs and ordered file IDs, sizes, and
+positions. Fetch bytes through
+`GET /settings/{id}/images/{image_id}/files/{file_id}`. S3 keys and internal
+filesystem paths are excluded from API responses.
+
+### Processing tasks and consuming downloads
+
+Submit multipart `setting_id` and repeated document `files` to `POST /tasks`.
+It returns `202`, a task JSON object, and a `Location` header pointing to its
+status endpoint. Poll `GET /tasks/{id}` or list the account's existing tasks
+with `GET /tasks` using the same pagination parameters as settings. Status
+responses contain timestamps, file counts, cancellation state, and
+`can_download`. States are `queued`, `running`, `completed`, `failed`, and
+`cancelled`. `POST /tasks/{id}/cancel` cancels a queued task immediately or
+requests worker cancellation of a running task.
+
+```bash
+curl -X POST "$TE_BASE_URL/tasks" \
+  -H "Authorization: Bearer $TE_API_TOKEN" \
+  -F 'setting_id=1' -F 'files=@book.docx' -F 'files=@another.epub'
+
+curl "$TE_BASE_URL/tasks/1" -H "Authorization: Bearer $TE_API_TOKEN"
+
+curl -X POST "$TE_BASE_URL/tasks/1/download" \
+  -H "Authorization: Bearer $TE_API_TOKEN" -o result.zip
+```
+
+**Downloading consumes the result.** `POST /tasks/{id}/download` returns the ZIP
+and deletes the task and its files, including for read-only tokens. The ZIP is
+built before consumption; archive failures leave the result available. Only one
+concurrent browser/API download can consume a given result. Subsequent requests
+return `404`; an interrupted network transfer after consumption cannot be
+retried. ZIP entries retain the website's `Your files/` directory.
+
+The API shares the existing worker queue and output with the website. Each
+account may have one queued/running task. An undownloaded completed task blocks
+a new submission. Failed/cancelled task records are cleared on the next
+submission. Completed results remain downloadable after their setting is deleted.
+The API adds no task-history retention or WebSocket protocol.

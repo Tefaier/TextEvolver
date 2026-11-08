@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from webauthn.helpers import bytes_to_base64url as b64
 
 from text_evolver.db.models import (
+    ApiToken,
     AuthFlow,
     BrowserSession,
     BrowserSessionFlash,
@@ -179,7 +180,7 @@ def test_stale_response_cannot_resurrect_or_modify_session(registered_client, da
         assert release.wait(10)
         return {"ok": True}
 
-    client.app.add_api_route("/test-slow", slow)
+    client.app.state.web_app.add_api_route("/test-slow", slow)
     with TestClient(client.app) as other, ThreadPoolExecutor() as pool:
         other.cookies.update(client.cookies)
         future = pool.submit(other.get, "/test-slow")
@@ -218,7 +219,7 @@ def test_normalized_flash_messages_are_bounded_and_consumed_once(registered_clie
             flash(request, f"Queued message {index}", "success")
         return {"ok": True}
 
-    client.app.add_api_route("/test-flashes", queue, methods=["POST"])
+    client.app.state.web_app.add_api_route("/test-flashes", queue, methods=["POST"])
     assert client.post("/test-flashes", headers=headers(client, "/my_settings")).status_code == 200
     with Session(database) as db:
         messages = list(db.scalars(select(BrowserSessionFlash.message).order_by(BrowserSessionFlash.id)))
@@ -407,6 +408,13 @@ def test_passkey_rejects_wrong_origin_rp_and_challenge(registered_client, bad):
 def test_webauthn_recovery_revokes_all_sessions(registered_client, database):
     client = registered_client
     auth = enroll(client)
+    from text_evolver.api.tokens import issue_token
+
+    with Session(database) as db:
+        user_id = db.scalar(select(UserAccount.id))
+        issue_token(db, user_id, "read")
+        issue_token(db, user_id, "read_write")
+        db.commit()
     copied = client.cookies.get(sessions.COOKIE)
     with TestClient(client.app) as other:
         other.cookies.set(sessions.COOKIE, copied)
@@ -433,6 +441,7 @@ def test_webauthn_recovery_revokes_all_sessions(registered_client, database):
         user = db.scalar(select(UserAccount).where(UserAccount.username == "reader"))
         assert verify_password("replacement password", db.get(UserPassword, user.id))
         assert db.scalar(select(AuthFlow.id).where(AuthFlow.user_id == user.id)) is None
+        assert db.scalar(select(ApiToken).where(ApiToken.user_id == user.id)) is None
 
 
 @pytest.mark.parametrize("operation", ["invalid", "register-invalid", "recover-invalid"])

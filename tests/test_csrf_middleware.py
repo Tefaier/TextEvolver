@@ -13,7 +13,7 @@ def test_all_post_routes_require_csrf(client, source):
         called.append(True)
         return {"ok": True}
 
-    client.app.add_api_route("/test-csrf", endpoint, methods=["POST"])
+    client.app.state.web_app.add_api_route("/test-csrf", endpoint, methods=["POST"])
     token = csrf_from(client.get("/login"))
     headers = {"X-CSRF-Token": "wrong"} if "header" in source else {}
     data = {"csrf_token": token if source == "invalid-header-valid-form" else "wrong"} if "form" in source else {}
@@ -21,17 +21,25 @@ def test_all_post_routes_require_csrf(client, source):
     assert called == []
 
 
-@pytest.mark.parametrize("method", ["GET", "HEAD", "PUT", "PATCH", "DELETE", "OPTIONS"])
-def test_csrf_validation_only_applies_to_post(client, method):
-    client.app.add_api_route("/test-csrf", lambda: {"ok": True}, methods=[method])
+@pytest.mark.parametrize("method", ["GET", "HEAD", "OPTIONS"])
+def test_safe_methods_do_not_require_csrf(client, method):
+    client.app.state.web_app.add_api_route("/test-csrf", lambda: {"ok": True}, methods=[method])
     assert client.request(method, "/test-csrf").status_code == 200
+
+
+@pytest.mark.parametrize("method", ["PUT", "PATCH", "DELETE"])
+def test_unsafe_browser_methods_require_csrf(client, method):
+    client.app.state.web_app.add_api_route("/test-csrf", lambda: {"ok": True}, methods=[method])
+    assert client.request(method, "/test-csrf").status_code == 403
+    token = csrf_from(client.get("/login"))
+    assert client.request(method, "/test-csrf", headers={"X-CSRF-Token": token}).status_code == 200
 
 
 def test_header_token_preserves_json_body(client):
     async def endpoint(request: Request):
         return await request.json()
 
-    client.app.add_api_route("/test-csrf", endpoint, methods=["POST"])
+    client.app.state.web_app.add_api_route("/test-csrf", endpoint, methods=["POST"])
     token = csrf_from(client.get("/login"))
     payload = {"text": "Привет", "values": [1, 2, 3]}
     response = client.post("/test-csrf", json=payload, headers={"X-CSRF-Token": token})
@@ -49,7 +57,7 @@ def test_form_token_preserves_fields_and_uploads(client, multipart):
                 payload["file_name"] = form["upload"].filename
             return payload
 
-    client.app.add_api_route("/test-csrf", endpoint, methods=["POST"])
+    client.app.state.web_app.add_api_route("/test-csrf", endpoint, methods=["POST"])
     token = csrf_from(client.get("/login"))
     contents = bytes(range(256)) * 8192
     files = {"upload": ("document.bin", contents, "application/octet-stream")} if multipart else None
@@ -82,7 +90,7 @@ def test_websocket_does_not_require_csrf(client):
         await websocket.send_json(await websocket.receive_json())
         await websocket.close()
 
-    client.app.add_api_websocket_route("/test-csrf", endpoint)
+    client.app.state.web_app.add_api_websocket_route("/test-csrf", endpoint)
     with client.websocket_connect("/test-csrf") as websocket:
         websocket.send_json({"ok": True})
         assert websocket.receive_json() == {"ok": True}

@@ -52,6 +52,7 @@ class UserAccount(Base):
     setting_limit: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('5'))
     language: Mapped[Optional[str]] = mapped_column(Text)
 
+    api_token: Mapped[list['ApiToken']] = relationship('ApiToken', back_populates='user')
     browser_session: Mapped[list['BrowserSession']] = relationship('BrowserSession', back_populates='user')
     google_identity: Mapped['GoogleIdentity'] = relationship('GoogleIdentity', uselist=False, back_populates='user')
     passkey: Mapped[list['Passkey']] = relationship('Passkey', back_populates='user')
@@ -59,6 +60,20 @@ class UserAccount(Base):
     user_password: Mapped['UserPassword'] = relationship('UserPassword', uselist=False, back_populates='user')
     auth_flow: Mapped[list['AuthFlow']] = relationship('AuthFlow', back_populates='user')
     processing_job: Mapped[list['ProcessingJob']] = relationship('ProcessingJob', back_populates='user')
+
+
+class ApiToken(Base):
+    __tablename__ = 'api_token'
+    __table_args__ = (
+        CheckConstraint("permission = 'read' OR permission = 'read_write'"),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('user_account.id'), primary_key=True)
+    permission: Mapped[str] = mapped_column(Text, primary_key=True)
+    token_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    issued_at: Mapped[datetime.datetime] = mapped_column(TIMESTAMP, nullable=False)
+
+    user: Mapped['UserAccount'] = relationship('UserAccount', back_populates='api_token')
 
 
 class BrowserSession(Base):

@@ -10,7 +10,7 @@ from starlette.datastructures import FormData, UploadFile
 from text_evolver.db.models import ImageConversion, ImageConversionFile, ProcessingJob, Setting, UserAccount
 from text_evolver.image_storage import ImageStorageChanges
 from text_evolver.services import _lock_setting_for_job, copy_setting, parse_setting_form, search_settings
-from text_evolver.web.routines.settings import update_setting
+from text_evolver.setting_service import update_setting
 from text_evolver.web.validation_utils import (
     MATCHER_MAX_LENGTH,
     SETTING_ELEMENT_LIMIT,

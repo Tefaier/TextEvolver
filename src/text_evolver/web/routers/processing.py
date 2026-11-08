@@ -1,20 +1,16 @@
 from __future__ import annotations
 
-import io
-import shutil
-from pathlib import Path
 from uuid import UUID
-from zipfile import ZIP_DEFLATED, ZipFile
 
-from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect, status
-from fastapi.responses import Response, StreamingResponse
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect, status
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from text_evolver.config import AppSettings, get_application_settings
-from text_evolver.db.models import ProcessingJob, UserAccount
+from text_evolver.db.models import UserAccount
 from text_evolver.db.session import get_db
-from text_evolver.services import ACTIVE_JOB_STATUSES, job_paths, request_job_cancellation
+from text_evolver.services import ACTIVE_JOB_STATUSES, request_job_cancellation
+from text_evolver.task_service import consume_result
 from text_evolver.web.auth import require_user
 from text_evolver.web.processing_status import ProcessingConnectionLimiter, wait_for_disconnect
 from text_evolver.web.routines.processing import processing_snapshot
@@ -86,27 +82,9 @@ async def download_files(
     app_settings: AppSettings = Depends(get_application_settings),
 ) -> Response:
     user = require_user(request, session)
-    job = session.scalar(
-        select(ProcessingJob)
-        .where(ProcessingJob.user_id == user.id, ProcessingJob.status == "completed")
-        .order_by(ProcessingJob.finished_at.desc())
-        .limit(1)
-    )
-    if job is None:
-        return redirect(request, "my_settings")
-    paths = job_paths(app_settings, job.id)
-    root = paths[0]
-    output = paths[2]
-    archive = io.BytesIO()
-    with ZipFile(archive, "w", ZIP_DEFLATED) as zip_file:
-        for source in sorted(output.iterdir()):
-            if source.is_file():
-                zip_file.write(source, Path("Your files") / source.name)
-    archive.seek(0)
-    session.delete(job)
-    shutil.rmtree(root, ignore_errors=True)
-    return StreamingResponse(
-        archive,
-        media_type="application/zip",
-        headers={"Content-Disposition": 'attachment; filename="Files.zip"'},
-    )
+    try:
+        return consume_result(session, app_settings, user.id)
+    except HTTPException as exc:
+        if exc.status_code == 404:
+            return redirect(request, "my_settings")
+        raise

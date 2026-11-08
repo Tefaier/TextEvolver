@@ -12,6 +12,7 @@ from starlette.responses import Response
 
 from text_evolver.db.models import BrowserSession
 from text_evolver.db.session import get_engine
+from text_evolver.transactions import commit, rollback_staged_jobs
 from text_evolver.web import utils
 from text_evolver.web.sessions import COOKIE, retrieve_current_session
 
@@ -80,7 +81,7 @@ class DatabaseSessionMiddleware:
                     message["headers"].extend([(b"cache-control", b"no-store"), (b"referrer-policy", b"no-referrer")])
                     if item.set_cookie and retrieve_current_session(db, item) is None:
                         item.set_cookie = False
-                    db.commit()
+                    commit(db)
                     cookie = Response()
                     if item.set_cookie:
                         remaining = max(0, math.ceil((utils.utc(item.expires_at) - utils.utcnow()).total_seconds()))
@@ -104,4 +105,5 @@ class DatabaseSessionMiddleware:
             db.rollback()
             raise
         finally:
+            rollback_staged_jobs(db)
             db.close()

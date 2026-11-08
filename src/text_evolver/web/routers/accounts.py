@@ -6,8 +6,9 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from text_evolver.api.tokens import PERMISSIONS, issue_token, revoke_tokens
 from text_evolver.config import AppSettings, get_application_settings
-from text_evolver.db.models import AuthFlow, GoogleIdentity, Passkey, UserAccount, UserPassword
+from text_evolver.db.models import ApiToken, AuthFlow, GoogleIdentity, Passkey, UserAccount, UserPassword
 from text_evolver.db.session import get_db
 from text_evolver.web.auth import (
     current_user,
@@ -146,15 +147,36 @@ def settings_page(
     request: Request, db: Session = Depends(get_db), settings: AppSettings = Depends(get_application_settings)
 ):
     user = require_user(request, db)
+    return render_account(request, db, settings, user)
+
+
+def render_account(request, db, settings, user, issued_token=None):
     return render(
         request,
         "account.html",
+        api_tokens={row.permission: row for row in db.scalars(select(ApiToken).where(ApiToken.user_id == user.id))},
+        issued_token=issued_token,
         **navigation_context(db, user, settings),
         has_password=db.get(UserPassword, user.id) is not None,
         language_preference=user.language or "default",
         google=db.scalar(select(GoogleIdentity).where(GoogleIdentity.user_id == user.id)),
         passkeys=list(db.scalars(select(Passkey).where(Passkey.user_id == user.id).order_by(Passkey.id))),
     )
+
+
+@router.post("/account/tokens/{permission}/{action}", name="account_token")
+async def account_token(permission: str, action: str, request: Request, db: Session = Depends(get_db),
+                        settings: AppSettings = Depends(get_application_settings)):
+    user = require_recent(request, db)
+    if permission not in PERMISSIONS or action not in {"create", "rotate", "delete"}:
+        raise HTTPException(422, "Invalid token operation")
+    if action == "delete":
+        db.execute(delete(ApiToken).where(ApiToken.user_id == user.id, ApiToken.permission == permission))
+        db.commit()
+        return form_redirect(request, "account_settings")
+    secret = issue_token(db, user.id, permission, rotate=action == "rotate")
+    db.commit()
+    return render_account(request, db, settings, user, issued_token=secret)
 
 
 @router.post("/account/settings", name="account_update")
@@ -194,6 +216,7 @@ async def update_account(request: Request, db: Session = Depends(get_db)):
             stored.password_hash = hash_password(password)
         else:
             add_password(db, user.id, password)
+        revoke_tokens(db, user.id)
         revoke_user_sessions(db, user.id, except_token_hash=state(request).token_hash)
         db.execute(delete(AuthFlow).where(AuthFlow.user_id == user.id))
         login(request, user, "password", recreate=False)
@@ -289,6 +312,7 @@ async def reset_password(request: Request, db: Session = Depends(get_db)):
     consume_reset_grant(request, db, pending.id)
     stored.password_hash = hash_password(str(form.get("password", "")))
     clear_login_failure(db, user.username, client_ip(request.client.host if request.client else None))
+    revoke_tokens(db, user.id)
     revoke_user_sessions(db, user.id)
     db.execute(delete(AuthFlow).where(AuthFlow.user_id == user.id))
     state(request).clear()

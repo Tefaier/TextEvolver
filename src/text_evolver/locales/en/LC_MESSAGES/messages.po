@@ -1281,3 +1281,39 @@ msgstr "Invalid image separation"
 
 msgid "Invalid unit conversion multiplier"
 msgstr "Invalid unit conversion multiplier"
+
+msgid "API tokens"
+msgstr "API tokens"
+
+msgid "Tokens do not expire. Save each new token now; it will not be shown again."
+msgstr "Tokens do not expire. Save each new token now; it will not be shown again."
+
+msgid "Read-only tokens can inspect settings and tasks and download results. Downloading consumes the task and its files."
+msgstr "Read-only tokens can inspect settings and tasks and download results. Downloading consumes the task and its files."
+
+msgid "Password changes and recovery revoke all API tokens."
+msgstr "Password changes and recovery revoke all API tokens."
+
+msgid "Your new API token"
+msgstr "Your new API token"
+
+msgid "Read only"
+msgstr "Read only"
+
+msgid "Read and write"
+msgstr "Read and write"
+
+msgid "Issued at"
+msgstr "Issued at"
+
+msgid "Refresh token"
+msgstr "Refresh token"
+
+msgid "Delete token"
+msgstr "Delete token"
+
+msgid "Create token"
+msgstr "Create token"
+
+msgid "API documentation"
+msgstr "API documentation"

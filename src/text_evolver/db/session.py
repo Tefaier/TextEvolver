@@ -37,4 +37,10 @@ def session_scope() -> Generator[Session, None, None]:
 
 
 def get_db(connection: HTTPConnection) -> Generator[Session, None, None]:
-    yield connection.scope["db"]
+    if "db" in connection.scope:
+        yield connection.scope["db"]
+        return
+    # Health checks do not traverse browser or API authentication middleware.
+    factory = getattr(connection.app.state, "session_factory", None)
+    with factory() if factory else Session(get_engine()) as session:
+        yield session

@@ -27,7 +27,7 @@ from text_evolver.services import (
     copy_setting,
     parse_setting_form,
 )
-from text_evolver.web.routines.settings import _calculate_row_changes, update_setting
+from text_evolver.setting_service import _calculate_row_changes, update_setting
 from text_evolver.web.validation_utils import ValidationError, validate_image_upload_size
 
 

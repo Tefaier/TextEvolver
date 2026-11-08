@@ -3,6 +3,35 @@
 <section class="page account-page">
     <header class="page-heading"><h1>{{ translate('Account settings') }}</h1></header>
     <section class="panel account-panel">
+        <h2>{{ translate('API tokens') }}</h2>
+        <p>{{ translate('Tokens do not expire. Save each new token now; it will not be shown again.') }}</p>
+        <p>{{ translate('Read-only tokens can inspect settings and tasks and download results. Downloading consumes the task and its files.') }}</p>
+        <p>{{ translate('Password changes and recovery revoke all API tokens.') }}</p>
+        {% if issued_token %}
+        <p>{{ translate('Your new API token') }}: <code id="new-api-token">{{ issued_token }}</code></p>
+        {% endif %}
+        {% for permission in ['read', 'read_write'] %}
+        <h3>{{ translate('Read only') if permission == 'read' else translate('Read and write') }}</h3>
+        {% if permission in api_tokens %}
+        <p>{{ translate('Issued at') }}: {{ api_tokens[permission].issued_at }}</p>
+        <form action="{{ url_for('account_token', permission=permission, action='rotate') }}" method="post" data-native-submit>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="button" type="submit">{{ translate('Refresh token') }}</button>
+        </form>
+        <form action="{{ url_for('account_token', permission=permission, action='delete') }}" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="button button-danger" type="submit">{{ translate('Delete token') }}</button>
+        </form>
+        {% else %}
+        <form action="{{ url_for('account_token', permission=permission, action='create') }}" method="post" data-native-submit>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="button" type="submit">{{ translate('Create token') }}</button>
+        </form>
+        {% endif %}
+        {% endfor %}
+        <p><a href="/api/v1/docs">{{ translate('API documentation') }}</a></p>
+    </section>
+    <section class="panel account-panel">
         <h2>{{ translate('Login name') }}</h2>
         <form action="{{ url_for('account_update') }}" method="post">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

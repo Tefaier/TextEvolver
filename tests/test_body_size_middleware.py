@@ -144,7 +144,7 @@ def test_body_replay_preserves_multipart_and_csrf(client, header_token):
         async with request.form() as form:
             return {"text": form["text"], "file": (await form["file"].read()).decode()}
 
-    client.app.add_api_route("/test-body", endpoint, methods=["POST"])
+    client.app.state.web_app.add_api_route("/test-body", endpoint, methods=["POST"])
     token = csrf_from(client.get("/login"))
     headers = {"X-CSRF-Token": token} if header_token else {}
     response = client.post(

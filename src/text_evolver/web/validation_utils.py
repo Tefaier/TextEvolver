@@ -27,6 +27,10 @@ class ValidationError(ValueError):
     pass
 
 
+class ConflictError(ValidationError):
+    """A valid operation conflicts with the current resource state."""
+
+
 def validate_username(username: str) -> None:
     if not 4 <= len(username) <= 62:
         raise ValidationError(translate("Username must contain between 4 and 62 characters"))

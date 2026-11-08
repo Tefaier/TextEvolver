@@ -11,6 +11,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from starlette.datastructures import UploadFile
+from fastapi import HTTPException
 
 from text_evolver.config import AppSettings
 from text_evolver.db.models import (
@@ -27,6 +28,7 @@ from text_evolver.fandoms import FandomName
 from text_evolver.image_storage import ImageStorage, ImageStorageChanges, ImageStorageError
 from text_evolver.web.i18n import translate
 from text_evolver.web.validation_utils import (
+    ConflictError,
     ValidationError,
     is_supported_document_filename,
     parse_bool,
@@ -154,6 +156,8 @@ def copy_setting(
     )
     if locked_source is None:
         raise ValidationError(translate("Setting not found"))
+    if not locked_source.public and locked_source.owner_id != user_id:
+        raise HTTPException(404, "Setting not found")
     ensure_setting_available(locked_source)
     source = get_setting(session, source_id)
     if source is None:
@@ -229,11 +233,11 @@ def copy_setting(
         session.flush()
         for image_file in source_files[value.id]:
             object_key = storage.object_key(user_id, copied.id, image_file.object_key)
+            storage_changes.created_object(object_key)
             try:
                 storage.copy(image_file.object_key, object_key)
             except ImageStorageError as exc:
                 raise ValidationError(translate("Unable to copy setting images")) from exc
-            storage_changes.created_object(object_key)
             session.add(
                 ImageConversionFile(
                     image_conversion_id=copied_conversion.id,
@@ -491,10 +495,10 @@ def _acquire_create_job_lock(session: Session, user_id: UUID) -> None:
 
 def ensure_setting_available(setting: Setting | SettingData) -> None:
     if setting.deletion_requested:
-        raise ValidationError(translate("This setting is pending deletion"))
+        raise ConflictError(translate("This setting is pending deletion"))
 
 
-def _lock_setting_for_job(session: Session, setting_id: int) -> None:
+def _lock_setting_for_job(session: Session, setting_id: int, user_id: UUID | None = None) -> None:
     try:
         locked_setting = session.scalar(
             select(Setting).where(Setting.id == setting_id).with_for_update(read=True, nowait=True)
@@ -502,10 +506,12 @@ def _lock_setting_for_job(session: Session, setting_id: int) -> None:
         )
     except OperationalError as exc:
         if getattr(exc.orig, "sqlstate", None) == "55P03":
-            raise ValidationError(translate("Setting is currently being updated")) from exc
+            raise ConflictError(translate("Setting is currently being updated")) from exc
         raise
     if locked_setting is None:
         raise ValidationError(translate("Setting not found"))
+    if user_id is not None and not locked_setting.public and locked_setting.owner_id != user_id:
+        raise HTTPException(404, "Setting not found")
     ensure_setting_available(locked_setting)
 
 
@@ -528,7 +534,7 @@ async def _create_job_in_transaction(
     setting_id: int,
     uploads: list[UploadFile],
 ) -> ProcessingJob:
-    _lock_setting_for_job(session, setting_id)
+    _lock_setting_for_job(session, setting_id, user_id)
     old_jobs = list(
         session.scalars(
             select(ProcessingJob).where(
@@ -559,9 +565,9 @@ async def _create_job_in_transaction(
         )
     )
     if active is not None:
-        raise ValidationError(translate("There are still files being processed"))
+        raise ConflictError(translate("There are still files being processed"))
     if completed is not None:
-        raise ValidationError(translate("Download completed files before starting another job"))
+        raise ConflictError(translate("Download completed files before starting another job"))
     valid = [upload for upload in uploads if is_supported_document_filename(upload.filename)]
     if not valid:
         raise ValidationError(translate("Select at least one supported document"))
@@ -572,10 +578,11 @@ async def _create_job_in_transaction(
     root = paths[0]
     origin = paths[1]
     output = paths[2]
-    origin.mkdir(parents=True)
-    output.mkdir(parents=True)
+    session.info.setdefault("staged_job_roots", []).append(root)
     total = 0
     try:
+        origin.mkdir(parents=True)
+        output.mkdir(parents=True)
         used_names: set[str] = set()
         for upload in valid:
             filename = validate_upload_filename(upload.filename, used_names)
@@ -596,12 +603,15 @@ async def _create_job_in_transaction(
     return job
 
 
-def request_job_cancellation(session: Session, user_id: UUID) -> ProcessingJob | None:
+def request_job_cancellation(
+    session: Session, user_id: UUID, job_id: int | None = None,
+) -> ProcessingJob | None:
     job = session.scalar(
         select(ProcessingJob).where(
             ProcessingJob.user_id == user_id,
+            (ProcessingJob.id == job_id) if job_id is not None else True,
             ProcessingJob.status.in_(ACTIVE_JOB_STATUSES),
-        )
+        ).with_for_update().execution_options(populate_existing=True)
     )
     if job is not None:
         if job.status == "queued":

@@ -1270,3 +1270,39 @@ msgstr "Некорректный интервал вставки изображ�
 
 msgid "Invalid unit conversion multiplier"
 msgstr "Некорректный коэффициент преобразования единиц"
+
+msgid "API tokens"
+msgstr "Токены API"
+
+msgid "Tokens do not expire. Save each new token now; it will not be shown again."
+msgstr "У токенов нет срока действия. Сохраните новый токен сейчас: повторно он не отображается."
+
+msgid "Read-only tokens can inspect settings and tasks and download results. Downloading consumes the task and its files."
+msgstr "Токены для чтения позволяют просматривать настройки и задания, скачивать результаты. После скачивания задание и его файлы удаляются."
+
+msgid "Password changes and recovery revoke all API tokens."
+msgstr "Смена и восстановление пароля отзывают все токены API."
+
+msgid "Your new API token"
+msgstr "Ваш новый токен API"
+
+msgid "Read only"
+msgstr "Только чтение"
+
+msgid "Read and write"
+msgstr "Чтение и запись"
+
+msgid "Issued at"
+msgstr "Дата выпуска"
+
+msgid "Refresh token"
+msgstr "Обновить токен"
+
+msgid "Delete token"
+msgstr "Удалить токен"
+
+msgid "Create token"
+msgstr "Создать токен"
+
+msgid "API documentation"
+msgstr "Документация API"
